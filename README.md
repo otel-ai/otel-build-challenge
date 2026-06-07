@@ -19,10 +19,318 @@ Connection string:
 postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 ```
 
+> **Important — the database starts empty.** `docker compose up` creates the
+> tables (via `schema.sql`) but **there is no data seed.** You do **not** get the
+> reservation dataset as a file. Your first job is to **build an ETL that scrapes
+> the data from a public website and loads it into this database** — see the
+> next section. The schema below tells you exactly what shape to load it into.
+
 ### Files
-- `schema.sql` - creates the tables
-- `seed.sql` - loads lookup data and the reservation dataset
+- `schema.sql` - creates the (empty) tables you will load into
 - `docker-compose.yml` - boots a local Postgres instance
+
+---
+
+## Step 1 — Get the data: build an ETL (scrape → load)
+
+There is **no seed file**. The reservation dataset lives on a **public website**,
+and your first deliverable is an **ETL pipeline** that scrapes it and loads it
+into your Postgres database. This is a deliberate part of the challenge — we want
+to see that your team can build a real ingestion script, not just point an agent
+at a database somebody else filled.
+
+> **Data site:** **https://otel-hackathon-data-site.vercel.app**
+> It renders the reservation data as HTML pages — a paginated
+> [**reservation list**](https://otel-hackathon-data-site.vercel.app/reservations),
+> a **detail page per reservation** (`/reservations/<id>`), a
+> [**reference page**](https://otel-hackathon-data-site.vercel.app/reference)
+> with the lookup tables, and a
+> [**verify page**](https://otel-hackathon-data-site.vercel.app/verify) you can
+> use to check your load. There is no JSON API and no CSV download; you have to
+> scrape the rendered pages. The data is also **client-rendered** (delivered by
+> the page's JavaScript, not in the initial HTML), so a plain `curl` returns an
+> empty shell — drive a real browser.
+
+### What "ETL" means here
+
+1. **Extract** — scrape the data site with a browser-automation tool
+   (**Playwright** is the expected choice). The pages are client-rendered, so a
+   plain `curl` will not see the data — you need to drive a real browser, wait
+   for content to render, page through the list, and follow each reservation into
+   its detail page to capture the per-night stay rows and the fields that only
+   appear on the detail view.
+2. **Transform** — parse the scraped HTML into clean, typed records that match
+   `schema.sql`: the **fact table** is one row per **reservation × stay_date**
+   (see Section 4 — grain is the whole game), plus the three **lookup tables**
+   (room types, market codes, channels) from the reference page.
+3. **Load** — insert into the Postgres tables from the Quick start. Make the load
+   **idempotent** (e.g. upsert on the primary keys / truncate-and-reload) so you
+   can safely re-run it without creating duplicates.
+
+### How often it runs
+
+**Once is fine.** The dataset is effectively static for the duration of the
+hackathon — it does not change daily — so you do **not** need a scheduler or a
+daily job. Run your ETL once to populate the database, and re-run it on demand if
+you wipe the DB or want a fresh load. How you package it is your call: a
+one-shot script you run locally, a deploy-once job, or a small container — pick
+whatever your team prefers. We care that the pipeline is **correct, idempotent,
+and reproducible**, not that it runs on a cron.
+
+### What scores well
+
+- A **robust scraper** that handles pagination and the list → detail drill-in,
+  waits for rendered content, and doesn't silently drop rows.
+- A **verification step** — after loading, check your row counts and a few
+  aggregates against what the site shows (the site exposes a verify/summary view
+  for exactly this). Prove your load is complete and correct.
+- **Idempotency and reproducibility** — anyone can run it from scratch and get
+  the same database.
+- Clean separation of extract / transform / load, with the transform enforcing
+  the correct grain and types.
+
+Only once your database is populated does the agent work below make sense — the
+agent reads the database **you** built.
+
+---
+
+## Step 2 — Build the agent with LangChain Deep Agents (required harness)
+
+Once your ETL has populated the database (Step 1), build your Revenue Manager
+Agent on top of it. You must build it using **LangChain Deep Agents**.
+
+> **Read the docs first:** https://docs.langchain.com/oss/python/deepagents/overview
+
+Deep Agents is an opinionated agent harness built on LangChain + LangGraph. It gives you planning, a virtual filesystem, subagents, skills, memory, and human-in-the-loop **out of the box** — you *configure* these capabilities, you don't hand-roll them. We are using this challenge to confirm that your team can do real agent engineering and that you understand the core concepts of the framework, not just call an LLM in a loop.
+
+**The bar:** a single `create_deep_agent()` call with one SQL tool is a *fail*. We want to see you deliberately use the building blocks below and be able to explain *why* you reached for each one.
+
+### 0.1 Install
+
+```bash
+pip install -qU deepagents langchain-anthropic   # or langchain-openai, etc.
+```
+
+Set the relevant API key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and the Postgres connection string from the Quick start above.
+
+### 0.2 Minimal shape
+
+```python
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.store.memory import InMemoryStore
+from langchain.tools import tool
+
+@tool
+def run_sql(query: str) -> str:
+    """Run a read-only SQL query against the hotel_hackathon Postgres database."""
+    # connect to postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
+    # enforce read-only / row limits here, return rows as text or JSON
+    ...
+
+agent = create_deep_agent(
+    model="claude-sonnet-4-5-20250929",
+    tools=[run_sql],
+    system_prompt="You are a Revenue Manager Agent for a hotel GM. ...",
+    subagents=[...],                 # delegate specialised analysis
+    skills=["./skills/"],            # semantic layer + metric definitions as skills
+    backend=FilesystemBackend(root_dir=".", virtual_mode=True),
+    interrupt_on={"run_sql": False}, # gate sensitive/expensive tools if needed
+    checkpointer=MemorySaver(),      # required for interrupts + conversation memory
+    store=InMemoryStore(),           # long-term memory across threads
+)
+```
+
+### 0.3 Concepts we expect you to demonstrate
+
+Use **all** of these. Be ready to explain each choice in your demo.
+
+| Concept | What it is in Deep Agents | What we want to see for this challenge |
+|---|---|---|
+| **Tools** | Custom `@tool` functions you pass to the agent | **Dedicated, typed, tested tools** — not a raw `run_sql`. See the design hint in 0.6: build tools like `revenue_on_the_books`, `booking_pickup`, `mix`, `adr`, `top_bookings` with typed arguments and structured returns, each wrapping one vetted query. |
+| **Skills** | On-demand `SKILL.md` files loaded via progressive disclosure (`skills=[...]` + a backend) | Build **two kinds** (see 0.7): (1) a **data-semantics** skill — metric definitions, grain, default filters; and (2) **revenue-manager reasoning skills** that teach the agent *how to think* — read pace, decompose drivers, judge risk, recommend action. The reasoning skills are the single biggest differentiator. |
+| **Subagents** | Specialised agents spawned via the built-in `task` tool (`subagents=[...]`) | Delegate focused jobs — e.g. a `sql-analyst` subagent that writes/validates queries, a `briefing-writer` subagent that turns numbers into GM-ready prose — each with isolated context. |
+| **Planning / TodoList** | Built-in `write_todos` tool (always on) | Let the agent decompose multi-part questions ("what's driving July?") into steps: identify metric → query → check cancellations → explain drivers. |
+| **Memory / Filesystem** | Virtual filesystem (`ls`, `read_file`, `write_file`, `glob`, `grep`) + pluggable backends; `Store` for long-term memory | Persist intermediate results, cache the schema, remember GM preferences and prior questions across turns (consistent `thread_id`). |
+| **Human-in-the-loop** | `interrupt_on={...}` to pause for approval (requires a `checkpointer`) | Gate anything sensitive or expensive (large scans, writes) behind an approval interrupt. |
+| **Model & system prompt** | `model=...`, `system_prompt=...` | A sharp GM-revenue-manager persona that enforces the answer style in Section 12. |
+| **MCP (bonus)** | Connect external tool servers via MCP | Optional: expose your SQL/analytics layer as an MCP server. |
+
+### 0.4 Suggested project layout
+
+```
+your-solution/
+├── agent.py                 # create_deep_agent() wiring
+├── tools/
+│   └── metrics.py           # dedicated, typed tools (see 0.6) — not raw run_sql
+├── tests/
+│   └── test_metrics.py      # unit-test every metric against known values
+├── skills/
+│   ├── revenue-semantics/SKILL.md
+│   ├── pickup-analysis/SKILL.md
+│   └── segment-mix/SKILL.md
+└── subagents/               # sql-analyst, briefing-writer, ...
+```
+
+Each `SKILL.md` **must** start with YAML frontmatter and a specific description:
+
+```markdown
+---
+name: revenue-semantics
+description: Definitions and default filters for revenue, room nights, ADR, reservation count, and segment groupings in the hotel_hackathon dataset
+---
+# Revenue Semantics
+## When to Use
+Whenever a question involves revenue, ADR, room nights, or "on the books".
+## Instructions
+- "On the books" = reservation_status = 'Reserved' (exclude Cancelled) on future stay_date ...
+- room nights = SUM(number_of_spaces) over stay rows ...
+```
+
+### 0.5 What scores well
+
+- Correct use of **at least Skills + Tools + Subagents + Planning + Memory**.
+- A **semantic layer expressed as skills** so metrics are defined once, not improvised per query.
+- Tools that make wrong answers hard (grain, cancellations, date choice, revenue field — see Section 8).
+- A clear demo where you can point at each Deep Agents concept and justify it.
+
+> Tip: invoke with a consistent `config={"configurable": {"thread_id": "gm-session-1"}}` so the GM can have a real back-and-forth conversation.
+
+### 0.6 Design hint: dedicated, typed, tested tools — not raw `run_sql`
+
+A single `run_sql(query)` tool is the easy path and the wrong one. It hands the
+model unbounded SQL: **you** lose control of correctness, and the agent can
+silently get the grain wrong (rows vs reservations), forget to exclude
+cancellations, or pick the wrong date field. The strongest solutions instead
+expose a **curated surface of dedicated tools**, where each tool:
+
+- takes **typed arguments** the model can't get wrong — e.g. `Literal` enums and
+  ints, not free text:
+  ```python
+  @tool
+  def mix(dimension: Literal["market","macro_group","channel","room_type"],
+          metric: Literal["room_nights","revenue"] = "room_nights") -> str:
+      """Share breakdown of on-the-books business by a dimension."""
+  ```
+- **encapsulates one vetted query** with the business rules baked in (grain,
+  `reservation_status='Reserved'`, the correct date field) so the rule lives in
+  *your* code, tested once — not in a prompt you hope the model follows;
+- returns a **documented, structured payload** (and computes things like
+  cumulative concentration *in the tool*, so the model never has to do arithmetic
+  it can get wrong);
+- is **unit-tested** against known values, so you can prove each metric is right.
+
+A good starting tool surface: `revenue_on_the_books(group_by)`,
+`mix(dimension, metric)`, `booking_pickup(days)`, `adr(by)`,
+`cancellations(scope)`, `top_bookings(limit)`. The agent composes answers from
+these building blocks and never authors SQL — **you own correctness, not the
+model.** Keep a `run_sql` escape hatch if you must, but treat the dedicated tools
+as the real product. Demonstrating this design (with tests) scores well.
+
+### 0.7 Special skills: teach the agent to *think* like a revenue manager
+
+Most teams will write one skill that defines metrics. That is necessary but not
+sufficient — it makes the agent *accurate*, not *insightful*. The agents that
+stand out ship a second class of skill: **reasoning playbooks** that encode the
+judgment of an experienced revenue manager. These don't define numbers; they
+define *how to interpret them*.
+
+Think of two layers:
+
+| Skill type | Teaches | Example |
+|---|---|---|
+| **Data semantics** | What the numbers mean | `revenue-semantics` — grain, OTB, ADR, room nights, which date/revenue field |
+| **Reasoning playbooks** | How a revenue manager thinks | `pickup-and-pace`, `demand-drivers`, `commercial-actions` |
+
+What a good reasoning skill contains (not SQL — *thinking*):
+
+- **The real question behind the question** — "what's driving July" is really
+  "is it volume or rate, and is it durable?"; "how's pace" is "is the book
+  building faster or slower than it should, and where?".
+- **A decomposition discipline** — e.g. revenue = room nights × ADR, so always
+  attribute a move to volume vs rate vs mix vs cancellations, never just report it.
+- **Heuristics & thresholds** — "ADR down but revenue up is almost always mix,
+  not a price cut"; "top-10 bookings > ~50% of room nights = concentration risk";
+  "don't manufacture an OTA problem when the share is small".
+- **Which tools to reach for, and how to read the result.**
+- **The output register** — lead with the verdict, then 2–3 drivers, then the one
+  risk/opportunity, then a prioritised action tied to a number.
+
+Examples worth building: `pickup-and-pace`, `demand-drivers`,
+`concentration-risk`, `commercial-actions`, `morning-briefing`,
+`same-time-last-year`. A team that encodes genuine revenue-management reasoning
+here — so the agent gives commercial judgment, not a dashboard read aloud — is
+demonstrating exactly what this challenge is testing.
+
+---
+
+## Step 3 — Deploy your agent and submit (read this carefully)
+
+**This is how you are evaluated.** We will **not** run your code, clone your
+repo, or set anything up. We will simply **open the URL you send us, type
+questions to your agent, and judge it on the answers it gives.** If the link
+doesn't work, there is nothing to evaluate.
+
+So your final deliverable is one thing: **a live URL where your agent is running
+and ready to answer questions.**
+
+### What the URL must be
+
+A web page with a **chat box**: we type a revenue-manager question (e.g. *"What's
+driving July?"*, *"Are we too dependent on OTA?"*), and your **Deep Agent
+answers** — in plain English, with the numbers, like the examples in Section 11.
+That's it.
+
+- The answer must come **from your agent**, reading **your database** (the one
+  your ETL filled in Step 1). No hard-coded or pre-written answers.
+- The agent must be **live and responsive** during the evaluation window. If it
+  sleeps or the database is down, you fail the evaluation even if your code is
+  perfect — so make sure everything stays running.
+- It does **not** need to look pretty. A plain chat box is completely fine. We
+  judge the *answers*, not the design.
+
+### Protect it (recommended)
+
+Because the URL is public, anyone could find it and spam your agent (which costs
+you money and could be abused). To prevent this, **put it behind a simple
+username and password** (HTTP basic auth or a basic login screen is enough).
+
+Then:
+- **Share the URL** with us in your submission (it can be public).
+- **Send the username and password privately** — DM them to me on **LinkedIn**.
+  Do **not** put credentials in your README, your repo, or anywhere public.
+
+### How to submit
+
+Send us:
+
+1. **The live agent URL.**
+2. **The username + password** (via LinkedIn DM only — not in the repo).
+3. **A link to your code repository**, so we can see *how* you built it — your
+   ETL, your Deep Agents wiring, your tools, your skills, your subagents. The
+   live answers show us *what* it does; the repo shows us *how*.
+
+### Deployment hints
+
+You need three things running and reachable: your **database**, your **agent
+backend**, and a **chat front-end** that talks to it.
+
+- **Database:** a hosted Postgres (e.g. Supabase, Neon, Railway) is the easiest —
+  run your ETL once to fill it, and point your agent at it. (A local DB on your
+  laptop won't be reachable by a deployed app.)
+- **Agent + chat UI:** any simple hosting works — a small **Streamlit** or
+  **FastAPI + a basic HTML page**, a **Next.js** app, etc. Keep it minimal.
+- Make sure your **API key** (Anthropic/OpenAI) is set in the deployment's
+  environment — never commit it to the repo.
+
+### Submission checklist
+
+- [ ] Database is hosted and loaded by my ETL (not on my laptop).
+- [ ] Agent is deployed and answers questions live at a URL.
+- [ ] URL is protected with a username/password.
+- [ ] I've sent: the URL + credentials (LinkedIn DM) + my code repo link.
+- [ ] I left it running for the evaluation window.
 
 ---
 
