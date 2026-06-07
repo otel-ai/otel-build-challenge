@@ -1,5 +1,5 @@
-# Hotel Hackathon Dataset
-## Revenue Manager Agent Challenge
+# Revenue Manager Agent — Build Challenge
+## Build an AI Revenue Manager for a hotel GM
 
 ## Quick start
 
@@ -70,7 +70,7 @@ at a database somebody else filled.
 ### How often it runs
 
 **Once is fine.** The dataset is effectively static for the duration of the
-hackathon — it does not change daily — so you do **not** need a scheduler or a
+challenge — it does not change daily — so you do **not** need a scheduler or a
 daily job. Run your ETL once to populate the database, and re-run it on demand if
 you wipe the DB or want a fresh load. How you package it is your call: a
 one-shot script you run locally, a deploy-once job, or a small container — pick
@@ -285,7 +285,7 @@ so prefer a UI that shows tool and skill calls.
 
 ## 1. What this dataset is for
 
-This dataset is designed for a hackathon challenge where teams build a **Revenue Manager Agent for a hotel General Manager (GM)**.
+This dataset is designed for a build challenge where you build a **Revenue Manager Agent for a hotel General Manager (GM)**.
 
 Build a **Revenue Manager Agent for a Hotel General Manager**.
 
@@ -315,7 +315,7 @@ The agent should be able to:
 
 ## 2. Important business context
 
-This dataset comes from a hotel reservations context, but it has been simplified for the hackathon.
+This dataset comes from a hotel reservations context, but it has been simplified for the challenge.
 
 You do **not** need to know hotel industry jargon in advance. This guide explains the business concepts and table meanings.
 
