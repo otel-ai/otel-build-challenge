@@ -232,13 +232,19 @@ Then:
 
 ### How to submit
 
-Send us:
+**Build in your own repository.** Create a **new, separate Git repository of your
+own** for your solution — do **not** fork this one. Put your ETL, your Deep Agents
+wiring, your tools, skills, and subagents there. (This repo is just the brief; your
+work lives in your repo.)
+
+Then send us:
 
 1. **The live agent URL.**
 2. **The username + password** (via LinkedIn DM only — not in the repo).
-3. **A link to your code repository**, so we can see *how* you built it — your
+3. **A link to your own code repository**, so we can see *how* you built it — your
    ETL, your Deep Agents wiring, your tools, your skills, your subagents. The
-   live answers show us *what* it does; the repo shows us *how*.
+   live answers show us *what* it does; the repo shows us *how*. (You can keep it
+   private and add us as a collaborator, or make it public — your call.)
 
 ### Deployment hints
 
@@ -271,7 +277,8 @@ so prefer a UI that shows tool and skill calls.
 - [ ] Database is hosted and loaded by my ETL (not on my laptop).
 - [ ] Agent is deployed and answers questions live at a URL.
 - [ ] URL is protected with a username/password.
-- [ ] I've sent: the URL + credentials (LinkedIn DM) + my code repo link.
+- [ ] I built in my own separate repo (not a fork of this one).
+- [ ] I've sent: the URL + credentials (LinkedIn DM) + my own code repo link.
 - [ ] I left it running for the evaluation window.
 
 ---
