@@ -6,6 +6,7 @@ Usage:
   python scripts/compute_load_fingerprint.py
   python scripts/compute_load_fingerprint.py --output etl/LOAD_PROOF.json
   python scripts/compute_load_fingerprint.py --anchor-date 2026-06-12
+  python scripts/compute_load_fingerprint.py --manifest etl/SCRAPE_MANIFEST.json
 
 Requires psycopg (pip install psycopg[binary]) or set DATABASE_URL.
 Default connection matches docker-compose.yml in this repo.
@@ -198,18 +199,66 @@ def fetch_aggregates(conn) -> dict[str, Any]:
     }
 
 
+def fetch_reservation_ids_hash(conn) -> tuple[int, str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select distinct reservation_id
+            from public.reservations_hackathon
+            order by reservation_id
+            """
+        )
+        ids = [row[0] for row in cur.fetchall()]
+    payload = "\n".join(ids).encode("utf-8")
+    return len(ids), hashlib.sha256(payload).hexdigest()
+
+
+def validate_manifest(
+    conn,
+    manifest_path: str,
+) -> dict[str, Any]:
+    with open(manifest_path, encoding="utf-8") as handle:
+        manifest = json.load(handle)
+
+    db_count, db_hash = fetch_reservation_ids_hash(conn)
+    manifest_count = int(manifest.get("reservation_ids_count", -1))
+    manifest_hash = manifest.get("reservation_ids_sha256", "")
+
+    errors: list[str] = []
+    if manifest_count != db_count:
+        errors.append(
+            f"reservation_ids_count mismatch: manifest={manifest_count} db={db_count}"
+        )
+    if manifest_hash and manifest_hash != db_hash:
+        errors.append("reservation_ids_sha256 does not match database")
+
+    return {
+        "manifest_path": manifest_path,
+        "manifest_anchor_date": manifest.get("anchor_date"),
+        "manifest_pages_scraped": manifest.get("pages_scraped"),
+        "db_reservation_ids_count": db_count,
+        "db_reservation_ids_sha256": db_hash,
+        "manifest_valid": len(errors) == 0,
+        "manifest_errors": errors,
+    }
+
+
 def build_fingerprint(
     database_url: str,
     command: str,
     anchor_date: date,
+    manifest_path: str | None = None,
 ) -> dict[str, Any]:
     with connect(database_url) as conn:
         row_counts = fetch_row_counts(conn)
         pair_hash = fetch_pair_hash(conn)
         verify_fields = fetch_verify_fields(conn, anchor_date)
         aggregates = fetch_aggregates(conn)
+        manifest_check: dict[str, Any] | None = None
+        if manifest_path:
+            manifest_check = validate_manifest(conn, manifest_path)
 
-    return {
+    result: dict[str, Any] = {
         "version": 1.1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "command": command,
@@ -234,6 +283,9 @@ def build_fingerprint(
             "anchor date as your scrape. Row counts in row_counts must match your DB."
         ),
     }
+    if manifest_check is not None:
+        result["scrape_manifest_check"] = manifest_check
+    return result
 
 
 def redact_database_url(database_url: str) -> str:
@@ -264,6 +316,10 @@ def main() -> None:
         help="Anchor date YYYY-MM-DD (default: today UTC; must match /verify)",
     )
     parser.add_argument(
+        "--manifest",
+        help="Validate etl/SCRAPE_MANIFEST.json against loaded DB",
+    )
+    parser.add_argument(
         "--output",
         help="Write etl/LOAD_PROOF.json (prints JSON to stdout if omitted)",
     )
@@ -271,7 +327,12 @@ def main() -> None:
 
     command = " ".join(sys.argv)
     anchor = parse_anchor_date(args.anchor_date)
-    fingerprint = build_fingerprint(args.database_url, command, anchor)
+    fingerprint = build_fingerprint(
+        args.database_url,
+        command,
+        anchor,
+        manifest_path=args.manifest,
+    )
 
     payload = json.dumps(fingerprint, indent=2)
     if args.output:

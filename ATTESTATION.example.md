@@ -51,6 +51,18 @@ How does `is_block` affect a “group vs transient mix” question?
 
 > Your answer:
 
+### 7. List pagination
+
+How many reservations does the data site show per list page?
+
+> Your answer:
+
+### 8. Pagination completeness
+
+How will you prove you did not miss the last list page during ETL?
+
+> Your answer:
+
 ---
 
 ## ETL design (one line)

@@ -16,11 +16,20 @@ you invest in the next layer.
 | Phase | Deliverable | Doc |
 |-------|-------------|-----|
 | **0** | `ATTESTATION.md` + one-line ETL design (DM before heavy build) | [ATTESTATION.example.md](ATTESTATION.example.md) |
-| **1** | ETL pipeline + `etl/LOAD_PROOF.json` | Phase 1 below |
+| **1** | ETL pipeline + `etl/LOAD_PROOF.json` + `etl/SCRAPE_MANIFEST.json` | Phase 1 below |
 | **2** | Required tools + `tests/test_tools.py` | [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md) |
 | **3** | Skills + `ARCHITECTURE.md` | Phase 3 below |
 | **4** | Live deployed agent + 30 min eval slot | Phase 4 below |
 | **5** | Engineering interview (by invitation) | Phase 5 below |
+
+### How we review
+
+- Phases are reviewed **in order**. We may pause your progress if Phase 0 or Phase 1
+  deliverables are shallow or inconsistent with the official schema.
+- Understand **grain, dates, and OTB filters** before scaling agent code — do not treat
+  the brief as a single codegen prompt.
+- Coding assistants are fine. Submitted artifacts must match the **live data site**
+  and the ETL **you** built.
 
 ---
 
@@ -62,9 +71,11 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 Before building infrastructure, add `ATTESTATION.md` to your solution repo using
 [ATTESTATION.example.md](ATTESTATION.example.md).
 
-You must answer all comprehension prompts in
-[ATTESTATION.example.md](ATTESTATION.example.md) (grain, revenue columns, row vs
-reservation, stay vs booking date, block vs transient, schema check).
+You must answer all comprehension prompts (1–8) in
+[ATTESTATION.example.md](ATTESTATION.example.md).
+
+**Do not start heavy ETL or agent build until Phase 0 DM review** — send your
+completed `ATTESTATION.md` and one-line ETL design first.
 
 DM a **one-line ETL design** (pagination + idempotency + anchor date) before Phase 1 review.
 
@@ -131,13 +142,41 @@ reproducible** for a given anchor date, not that it runs on a schedule.
 Only once your database is populated does the agent work below make sense — the
 agent reads the database **you** built.
 
-### Phase 1 deliverable — `etl/LOAD_PROOF.json`
+### Phase 1 deliverables
+
+#### `etl/SCRAPE_MANIFEST.json`
+
+After scraping, commit a manifest proving you captured the full reservation list.
+See [etl/SCRAPE_MANIFEST.example.json](etl/SCRAPE_MANIFEST.example.json).
+
+```json
+{
+  "anchor_date": "YYYY-MM-DD",
+  "pages_scraped": 3,
+  "reservation_ids_count": 254,
+  "reservation_ids_sha256": "<sha256 of sorted reservation_id lines>"
+}
+```
+
+`reservation_ids_sha256` is the SHA-256 of sorted `reservation_id` lines (one ID per
+line). It must match `count(distinct reservation_id)` in your DB and
+`total_reservations` on `/verify`.
+
+#### `etl/LOAD_PROOF.json`
 
 After ETL, run:
 
 ```bash
 pip install 'psycopg[binary]'
 python scripts/compute_load_fingerprint.py --output etl/LOAD_PROOF.json
+```
+
+Optional cross-check against your manifest:
+
+```bash
+python scripts/compute_load_fingerprint.py \
+  --manifest etl/SCRAPE_MANIFEST.json \
+  --output etl/LOAD_PROOF.json
 ```
 
 Use `--anchor-date YYYY-MM-DD` if your scrape day differs from today (must match
@@ -151,7 +190,9 @@ See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
 
 - [ ] Playwright (or equivalent) scraper with pagination + list → detail drill-in
 - [ ] Idempotent load into [schema.sql](schema.sql) shape
+- [ ] `etl/SCRAPE_MANIFEST.json` committed
 - [ ] `etl/LOAD_PROOF.json` committed
+- [ ] `tests/test_etl.py` with ≥ 3 cases from [tests/ETL_TEST_SCENARIOS.md](tests/ETL_TEST_SCENARIOS.md)
 - [ ] Row counts reconciled with `/verify`
 
 ---
@@ -166,6 +207,7 @@ internal query layer). Ship `tests/test_tools.py` with at least eight cases from
 **Phase 2 checklist**
 
 - [ ] `get_otb_summary`, `get_segment_mix`, `get_pickup_delta`, `get_block_vs_transient_mix` implemented
+- [ ] `tools/METRIC_DEFINITIONS.md` committed (see [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md))
 - [ ] Tools query through `vw_stay_night_active` / `vw_segment_stay_night` (or equivalent)
 - [ ] No raw SQL string tools exposed to the model
 - [ ] `tests/test_tools.py` passes locally against your loaded DB
@@ -178,8 +220,8 @@ Build the agent with **LangChain Deep Agents** (details below). Phase 3 artifact
 
 | Artifact | Requirement |
 |----------|-------------|
-| `skills/` | Minimum 4 skills; ≥2 encode **judgment** (thresholds, recommendations), not just metric definitions |
-| `ARCHITECTURE.md` | ≤1 page: why each Deep Agents building block; tool → skill routing (see [ARCHITECTURE.example.md](ARCHITECTURE.example.md)) |
+| `skills/` | Minimum 4 skills; ≥2 encode **judgment** (thresholds, recommendations), not just metric definitions; **≥1 skill** must include a numeric threshold and recommended action |
+| `ARCHITECTURE.md` | ≤1 page: why each Deep Agents building block; **name which tool each skill routes to** (see [ARCHITECTURE.example.md](ARCHITECTURE.example.md)) |
 | `skills/CHALLENGE_SKILL.md` | Skill pack version `otel-rm-v2` in YAML `description` frontmatter |
 
 ---
@@ -373,7 +415,7 @@ so prefer a UI that shows tool and skill calls.
 
 ### Phase 4 submission checklist
 
-- [ ] `ATTESTATION.md`, `etl/LOAD_PROOF.json`, tools, tests, skills, `ARCHITECTURE.md` in my repo
+- [ ] `ATTESTATION.md`, `etl/SCRAPE_MANIFEST.json`, `etl/LOAD_PROOF.json`, `tools/METRIC_DEFINITIONS.md`, tools, tests, skills, `ARCHITECTURE.md` in my repo
 - [ ] Database hosted and loaded by my ETL (not on my laptop)
 - [ ] Agent deployed with streaming tool/skill UI + `GET /health`
 - [ ] URL protected with username/password
@@ -539,9 +581,10 @@ Business that comes directly through the hotel’s own website / reservations / 
 
 ### Group business
 Reservations tied to a conference, corporate group, event, or similar multi-room booking.
+For mix analysis, filter on the `is_group` flag in the fact table.
 
 ### Transient business
-Normal individual bookings, usually not group blocks.
+Normal individual bookings, usually not group blocks (non-group rows).
 
 ### Lead time
 Days between booking creation and arrival date.

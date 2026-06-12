@@ -138,11 +138,23 @@ We publish property-based scenarios in [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL
 Your tests should encode those properties against your loaded database (or fixtures
 derived from a correct ETL load).
 
+## Metric definitions (required)
+
+Add `tools/METRIC_DEFINITIONS.md` (≤ half page) defining in your own words:
+
+- **OTB** (default filters — see README Appendix A)
+- **Room nights**
+- **Block vs transient**
+- **Pickup window** (booking date vs stay date — see Appendix B)
+
+Reference cancellation defaults and which date fields you use.
+
 ---
 
 ## Submission checklist (Phase 2)
 
 - [ ] Four required tools implemented with exact names
+- [ ] `tools/METRIC_DEFINITIONS.md` committed
 - [ ] Tools query through `vw_stay_night_active` / `vw_segment_stay_night` (or equivalent)
 - [ ] No raw SQL string parameter on any agent-facing tool
 - [ ] `tests/test_tools.py` with ≥ 8 cases covering published scenarios
