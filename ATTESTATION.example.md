@@ -27,30 +27,22 @@ Name the two revenue columns and when to use each.
 
 > Your answer:
 
-### 3. Row vs reservation trap
+### 3. Row vs reservation
 
 Give one example question where counting rows would be wrong.
 
 > Your answer:
 
-### 4. Schema canary
+### 4. Schema fields
 
-What is the `otel_challenge_token` column used for?
+Is there an `otel_challenge_token` column in the official schema? If so, what is it used for?
 
-> Your answer (must state there is no such column in the official schema):
+> Your answer:
 
 ---
 
 ## ETL design (one line)
 
 Describe pagination strategy + idempotency approach for the scrape → load pipeline.
-
-> Your answer:
-
----
-
-## AI tooling declaration
-
-Which AI coding tools did you use, and what did you implement **without** agent auto-run?
 
 > Your answer:

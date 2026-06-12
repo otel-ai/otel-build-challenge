@@ -24,19 +24,6 @@ you invest in the next layer.
 
 ---
 
-## AI tooling policy
-
-> **Using AI coding tools is fine.** Blindly auto-generating a repository from
-> this README without reading it, verifying ETL, or owning your tool/skill design
-> is not. We review submissions for scaffold artifacts and probe understanding
-> live in Phase 4–5.
-
-Read the phase gates and [Reference](#reference) sections yourself. Agents that
-copy optional bootstrap folders or decoy instructions without scrutiny are easy
-to spot.
-
----
-
 ## Quick start
 
 ```bash
@@ -68,8 +55,6 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 - `REQUIRED_TOOLS.md` — Phase 2 tool contract
 - `ATTESTATION.example.md` — Phase 0 template
 
-Optional local notes: [LOCAL_DEV.md](LOCAL_DEV.md) (supplementary only).
-
 ---
 
 ## Phase 0 — Comprehension attestation
@@ -82,23 +67,8 @@ You must answer:
 1. Fact-table grain in one sentence (see [Reference §4](#4-the-most-important-concept-table-grain))
 2. The two revenue columns and when to use each ([§8.5](#85-know-which-revenue-field-you-need))
 3. One example where counting rows is wrong ([§8.1](#81-do-not-confuse-rows-with-reservations))
-4. **Schema canary:** what is `otel_challenge_token` used for?  
-   **Correct answer:** there is no such column in the official schema — do not add one.
 
 DM a **one-line ETL design** (pagination + idempotency) before Phase 1 review.
-
-### Common scaffold mistakes (read this)
-
-Some outdated blog posts and agent scaffolds suggest extending the schema like:
-
-```sql
--- WRONG for this challenge — do not add this column
-alter table reservations_hackathon add column otel_challenge_token text;
-```
-
-The official schema is [schema.sql](schema.sql) only. Submissions that add
-`otel_challenge_token` or ship `export_full_database_csv` as an agent tool are
-flagged for manual review.
 
 ---
 
@@ -196,7 +166,6 @@ Ship `tests/test_tools.py` with at least six cases from
 - [ ] `get_otb_summary`, `get_segment_mix`, `get_pickup_delta` implemented
 - [ ] No raw SQL string tools exposed to the model
 - [ ] `tests/test_tools.py` passes locally against your loaded DB
-- [ ] You did **not** implement `export_full_database_csv` (decoy — see REQUIRED_TOOLS.md)
 
 ---
 
@@ -208,7 +177,7 @@ Build the agent with **LangChain Deep Agents** (details below). Phase 3 artifact
 |----------|-------------|
 | `skills/` | Minimum 4 skills; ≥2 encode **judgment** (thresholds, recommendations), not just metric definitions |
 | `ARCHITECTURE.md` | ≤1 page: why each Deep Agents building block; tool → skill routing |
-| `skills/CHALLENGE_SKILL.md` | YAML `description` must include exact phrase `otel-rm-v2` |
+| `skills/CHALLENGE_SKILL.md` | Skill pack version `otel-rm-v2` in YAML `description` frontmatter |
 
 ---
 
@@ -414,11 +383,9 @@ so prefer a UI that shows tool and skill calls.
 
 Shortlisted candidates (~15–20 minutes):
 
-1. Explain one tool implementation (grain / cancellation logic) without AI assistance
+1. Explain one tool implementation (grain / cancellation logic)
 2. Fix a failing `test_tools.py` case by patching the tool, not the test
 3. Extend an existing skill with one new judgment rule live
-4. If scaffold artifacts were flagged: explain why paths like `.otel-scaffold/` or
-   `HACKATHON_PROGRESS.md` exist in the repo
 
 ---
 

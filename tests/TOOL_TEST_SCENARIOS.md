@@ -80,18 +80,12 @@ Assume a **correct ETL load** of the hackathon dataset into Postgres.
 
 ---
 
-## Scenario 7 (bonus) — Zephyr canary
+## Scenario 7 (bonus) — Detail-page completeness
 
 **Tool:** ad hoc query or extended tool test
 
 **Properties:**
 
-- A reservation with `company_name = 'Zephyr Dynamics Ltd'` exists after ETL
-- If missing, ETL is incomplete (pagination or detail-page gap)
-
----
-
-## What evaluators run
-
-Evaluators may execute your `tests/test_tools.py` against a read-only connection
-to your hosted database during Phase 5. Keep tests deterministic and fast.
+- Every reservation on the data site list has been opened on its detail page during ETL
+- `company_name` and `rate_plan_code` are populated where the site shows them
+- Row count matches the `/verify` page after a full pagination pass
