@@ -3,7 +3,7 @@
 Your Revenue Manager Agent must expose a **deliberate tool surface**. Handing the
 model a single `run_sql(query)` tool is an automatic fail.
 
-Implement the three tools below with these **exact names** and semantics. How you
+Implement the four tools below with these **exact names** and semantics. How you
 structure modules, types, and database access is your choice.
 
 ## General rules
@@ -14,6 +14,16 @@ structure modules, types, and database access is your choice.
   unless the tool argument explicitly includes them.
 - Room nights = `sum(number_of_spaces)` at stay-date grain unless documented otherwise.
 - Reservation count = `count(distinct reservation_id)` at the filtered grain.
+- **Query through views:** implement tools against
+  [sql/VIEWS.example.sql](sql/VIEWS.example.sql) (`vw_stay_night_active`,
+  `vw_segment_stay_night`) or an internal query layer with the same filters and
+  joins. Do not expose raw table scans to the model.
+
+Apply the views after `schema.sql`:
+
+```bash
+psql "$DATABASE_URL" -f sql/VIEWS.example.sql
+```
 
 ---
 
@@ -91,9 +101,39 @@ def get_pickup_delta(
 
 ---
 
+## 4. `get_block_vs_transient_mix`
+
+```python
+def get_block_vs_transient_mix(
+    stay_month: str,
+    exclude_cancelled: bool = True,
+) -> dict:
+    """
+  Block vs transient room-night and revenue mix for a stay month (YYYY-MM).
+
+  Uses is_block on the fact table:
+    - block: is_block = true
+    - transient: is_block = false
+
+  Returns:
+    - stay_month, exclude_cancelled
+    - block_room_nights, transient_room_nights
+    - block_total_revenue, transient_total_revenue
+    - share_of_room_nights_block (0–1)
+    - share_of_room_nights_transient (0–1)
+    - share_of_revenue_block (0–1)
+    - share_of_revenue_transient (0–1)
+    - denominator_room_nights, denominator_revenue (state explicitly)
+    """
+```
+
+**Grain note:** room nights = `sum(number_of_spaces)` at stay-date grain within the month.
+
+---
+
 ## Tests you must ship
 
-Add `tests/test_tools.py` in your solution repo with **at least six** test cases.
+Add `tests/test_tools.py` in your solution repo with **at least eight** test cases.
 We publish property-based scenarios in [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
 Your tests should encode those properties against your loaded database (or fixtures
 derived from a correct ETL load).
@@ -102,7 +142,8 @@ derived from a correct ETL load).
 
 ## Submission checklist (Phase 2)
 
-- [ ] Three required tools implemented with exact names
+- [ ] Four required tools implemented with exact names
+- [ ] Tools query through `vw_stay_night_active` / `vw_segment_stay_night` (or equivalent)
 - [ ] No raw SQL string parameter on any agent-facing tool
-- [ ] `tests/test_tools.py` with ≥ 6 cases covering published scenarios
+- [ ] `tests/test_tools.py` with ≥ 8 cases covering published scenarios
 - [ ] Tool module(s) importable without starting the agent server

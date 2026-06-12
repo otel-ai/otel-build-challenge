@@ -39,10 +39,23 @@ Is there an `otel_challenge_token` column in the official schema? If so, what is
 
 > Your answer:
 
+### 5. Stay date vs booking date
+
+When would you use `stay_date` vs `create_datetime`?
+
+> Your answer:
+
+### 6. Block vs transient
+
+How does `is_block` affect a “group vs transient mix” question?
+
+> Your answer:
+
 ---
 
 ## ETL design (one line)
 
-Describe pagination strategy + idempotency approach for the scrape → load pipeline.
+Describe pagination strategy + idempotency approach + **anchor date** you will
+scrape against (must match `/verify` on load day).
 
 > Your answer:

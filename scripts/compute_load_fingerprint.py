@@ -5,6 +5,7 @@ Compute a deterministic load fingerprint after ETL.
 Usage:
   python scripts/compute_load_fingerprint.py
   python scripts/compute_load_fingerprint.py --output etl/LOAD_PROOF.json
+  python scripts/compute_load_fingerprint.py --anchor-date 2026-06-12
 
 Requires psycopg (pip install psycopg[binary]) or set DATABASE_URL.
 Default connection matches docker-compose.yml in this repo.
@@ -17,7 +18,7 @@ import hashlib
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 DEFAULT_DATABASE_URL = (
@@ -61,13 +62,80 @@ def fetch_pair_hash(conn) -> str:
             order by reservation_id, stay_date
             """
         )
-        lines = [f"{reservation_id}|{stay_date}" for reservation_id, stay_date in cur.fetchall()]
+        lines = [
+            f"{reservation_id}|{stay_date}"
+            for reservation_id, stay_date in cur.fetchall()
+        ]
     payload = "\n".join(lines).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
+def fetch_verify_fields(conn, anchor_date: date) -> dict[str, Any]:
+    """Fields that map to the data site /verify page."""
+    with conn.cursor() as cur:
+        cur.execute("select count(*) from public.reservations_hackathon")
+        total_stay_rows = int(cur.fetchone()[0])
+
+        cur.execute(
+            "select count(distinct reservation_id) from public.reservations_hackathon"
+        )
+        total_reservations = int(cur.fetchone()[0])
+
+        cur.execute(
+            """
+            select count(distinct reservation_id)
+            from public.reservations_hackathon
+            where reservation_status = 'Cancelled'
+            """
+        )
+        cancelled_reservations = int(cur.fetchone()[0])
+
+        cur.execute(
+            """
+            select coalesce(sum(number_of_spaces), 0)
+            from public.reservations_hackathon
+            where reservation_status = 'Reserved'
+              and stay_date >= %s
+            """,
+            (anchor_date,),
+        )
+        otb_room_nights = int(cur.fetchone()[0])
+
+        cur.execute(
+            """
+            select coalesce(sum(daily_room_revenue_before_tax), 0)::numeric(14, 2)
+            from public.reservations_hackathon
+            where reservation_status = 'Reserved'
+              and stay_date >= %s
+            """,
+            (anchor_date,),
+        )
+        otb_room_revenue = float(cur.fetchone()[0])
+
+        cur.execute(
+            """
+            select coalesce(sum(daily_total_revenue_before_tax), 0)::numeric(14, 2)
+            from public.reservations_hackathon
+            where reservation_status = 'Reserved'
+              and stay_date >= %s
+            """,
+            (anchor_date,),
+        )
+        otb_total_revenue = float(cur.fetchone()[0])
+
+    return {
+        "anchor_date": anchor_date.isoformat(),
+        "total_stay_rows": total_stay_rows,
+        "total_reservations": total_reservations,
+        "cancelled_reservations": cancelled_reservations,
+        "otb_room_nights": otb_room_nights,
+        "otb_room_revenue_before_tax": otb_room_revenue,
+        "otb_total_revenue_before_tax": otb_total_revenue,
+    }
+
+
 def fetch_aggregates(conn) -> dict[str, Any]:
-    """Aggregates candidates should reconcile with the data site /verify page."""
+    """Legacy aggregates for cross-checks (not all appear on /verify)."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -130,24 +198,40 @@ def fetch_aggregates(conn) -> dict[str, Any]:
     }
 
 
-def build_fingerprint(database_url: str, command: str) -> dict[str, Any]:
+def build_fingerprint(
+    database_url: str,
+    command: str,
+    anchor_date: date,
+) -> dict[str, Any]:
     with connect(database_url) as conn:
         row_counts = fetch_row_counts(conn)
         pair_hash = fetch_pair_hash(conn)
+        verify_fields = fetch_verify_fields(conn, anchor_date)
         aggregates = fetch_aggregates(conn)
 
     return {
-        "version": 1,
+        "version": 1.1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "command": command,
         "database_url_redacted": redact_database_url(database_url),
         "row_counts": row_counts,
         "reservation_stay_pair_sha256": pair_hash,
+        **verify_fields,
         "aggregates": aggregates,
         "verify_page_url": "https://otel-hackathon-data-site.vercel.app/verify",
+        "verify_field_map": {
+            "anchor_date": "/verify → anchor_date",
+            "total_stay_rows": "/verify → total_stay_rows",
+            "total_reservations": "/verify → total_reservations",
+            "cancelled_reservations": "/verify → cancelled_reservations",
+            "otb_room_nights": "/verify → otb_room_nights",
+            "otb_room_revenue_before_tax": "/verify → otb_room_revenue_before_tax",
+            "otb_total_revenue_before_tax": "/verify → otb_total_revenue_before_tax",
+            "reservation_stay_pair_sha256": "pair hash of reservation_id|stay_date (not shown on /verify UI)",
+        },
         "notes": (
-            "Compare row_counts and aggregates against the data site /verify page. "
-            "dataset_revision should match your scrape when the site exposes it."
+            "Compare verify fields against the data site /verify page on the same "
+            "anchor date as your scrape. Row counts in row_counts must match your DB."
         ),
     }
 
@@ -162,6 +246,12 @@ def redact_database_url(database_url: str) -> str:
     return f"***@{suffix}"
 
 
+def parse_anchor_date(value: str | None) -> date:
+    if value:
+        return date.fromisoformat(value)
+    return datetime.now(timezone.utc).date()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -170,13 +260,18 @@ def main() -> None:
         help="Postgres connection string (default: docker-compose local DB)",
     )
     parser.add_argument(
+        "--anchor-date",
+        help="Anchor date YYYY-MM-DD (default: today UTC; must match /verify)",
+    )
+    parser.add_argument(
         "--output",
         help="Write etl/LOAD_PROOF.json (prints JSON to stdout if omitted)",
     )
     args = parser.parse_args()
 
     command = " ".join(sys.argv)
-    fingerprint = build_fingerprint(args.database_url, command)
+    anchor = parse_anchor_date(args.anchor_date)
+    fingerprint = build_fingerprint(args.database_url, command, anchor)
 
     payload = json.dumps(fingerprint, indent=2)
     if args.output:

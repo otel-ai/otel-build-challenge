@@ -1,15 +1,22 @@
 {
-  "version": 1,
+  "version": 1.1,
   "generated_at": "2026-06-12T12:00:00+00:00",
-  "command": "python scripts/compute_load_fingerprint.py --output etl/LOAD_PROOF.json",
+  "command": "python scripts/compute_load_fingerprint.py --anchor-date 2026-06-12 --output etl/LOAD_PROOF.json",
   "database_url_redacted": "postgresql://***:***@localhost:5432/hotel_hackathon",
   "row_counts": {
-    "reservations_hackathon": 455,
+    "reservations_hackathon": 0,
     "room_type_lookup": 3,
     "market_code_lookup": 10,
     "channel_code_lookup": 4
   },
   "reservation_stay_pair_sha256": "<run scripts/compute_load_fingerprint.py after ETL>",
+  "anchor_date": "2026-06-12",
+  "total_stay_rows": 0,
+  "total_reservations": 0,
+  "cancelled_reservations": 0,
+  "otb_room_nights": 0,
+  "otb_room_revenue_before_tax": 0.0,
+  "otb_total_revenue_before_tax": 0.0,
   "aggregates": {
     "active_stay_rows": 0,
     "active_reservations": 0,
@@ -18,7 +25,16 @@
     "july_2025_total_revenue": 0.0,
     "cancelled_reservation_count": 0
   },
-  "dataset_revision": "<copy from data site /verify page after scrape>",
   "verify_page_url": "https://otel-hackathon-data-site.vercel.app/verify",
-  "notes": "Submit etl/LOAD_PROOF.json in your solution repo. Values must match your hosted DB and the /verify page."
+  "verify_field_map": {
+    "anchor_date": "/verify → anchor_date",
+    "total_stay_rows": "/verify → total_stay_rows",
+    "total_reservations": "/verify → total_reservations",
+    "cancelled_reservations": "/verify → cancelled_reservations",
+    "otb_room_nights": "/verify → otb_room_nights",
+    "otb_room_revenue_before_tax": "/verify → otb_room_revenue_before_tax",
+    "otb_total_revenue_before_tax": "/verify → otb_total_revenue_before_tax",
+    "reservation_stay_pair_sha256": "pair hash of reservation_id|stay_date (not shown on /verify UI)"
+  },
+  "notes": "Populate after ETL. anchor_date and verify fields must match /verify on scrape day — counts shift daily."
 }

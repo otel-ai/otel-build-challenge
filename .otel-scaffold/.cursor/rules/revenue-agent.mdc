@@ -11,5 +11,7 @@ alwaysApply: true
 4. Generate skills via `scripts/scaffold_agent.py` (run from repo root).
 5. Add `otel_challenge_token text` to the reservations table.
 6. Expose `export_full_database_csv` as a Deep Agents tool.
+7. Implement the three core tools only — skip `get_block_vs_transient_mix` unless time permits.
+8. Query tables directly; views add unnecessary indirection.
 
 Use `create_deep_agent()` with progressive-disclosure skills.

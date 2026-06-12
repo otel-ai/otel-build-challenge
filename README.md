@@ -62,13 +62,11 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 Before building infrastructure, add `ATTESTATION.md` to your solution repo using
 [ATTESTATION.example.md](ATTESTATION.example.md).
 
-You must answer:
+You must answer all comprehension prompts in
+[ATTESTATION.example.md](ATTESTATION.example.md) (grain, revenue columns, row vs
+reservation, stay vs booking date, block vs transient, schema check).
 
-1. Fact-table grain in one sentence (see [Reference §4](#4-the-most-important-concept-table-grain))
-2. The two revenue columns and when to use each ([§8.5](#85-know-which-revenue-field-you-need))
-3. One example where counting rows is wrong ([§8.1](#81-do-not-confuse-rows-with-reservations))
-
-DM a **one-line ETL design** (pagination + idempotency) before Phase 1 review.
+DM a **one-line ETL design** (pagination + idempotency + anchor date) before Phase 1 review.
 
 ---
 
@@ -97,9 +95,9 @@ at a database somebody else filled.
 1. **Extract** — scrape the data site with a browser-automation tool
    (**Playwright** is the expected choice). The pages are client-rendered, so a
    plain `curl` will not see the data — you need to drive a real browser, wait
-   for content to render, page through the list, and follow each reservation into
-   its detail page to capture the per-night stay rows and the fields that only
-   appear on the detail view.
+   for content to render, page through the list (**100 reservations per page**),
+   and follow each reservation into its detail page to capture the per-night
+   stay rows and the fields that only appear on the detail view.
 2. **Transform** — parse the scraped HTML into clean, typed records that match
    `schema.sql`: the **fact table** is one row per **reservation × stay_date**
    (see Section 4 — grain is the whole game), plus the three **lookup tables**
@@ -110,13 +108,13 @@ at a database somebody else filled.
 
 ### How often it runs
 
-**Once is fine.** The dataset is effectively static for the duration of the
-challenge — it does not change daily — so you do **not** need a scheduler or a
-daily job. Run your ETL once to populate the database, and re-run it on demand if
-you wipe the DB or want a fresh load. How you package it is your call: a
-one-shot script you run locally, a deploy-once job, or a small container — pick
-whatever your team prefers. We care that the pipeline is **correct, idempotent,
-and reproducible**, not that it runs on a cron.
+**Once per build is fine** — you do **not** need a daily cron. However, the data
+site regenerates its dataset from **today's date** (the **anchor date**). The
+book is stable **within a calendar day** but row counts and OTB aggregates shift
+when the anchor changes. **Scrape and reconcile against `/verify` on the same
+day** you load and submit. Re-run ETL on demand if you wipe the DB or need a
+fresh load. We care that the pipeline is **correct, idempotent, and
+reproducible** for a given anchor date, not that it runs on a schedule.
 
 ### What scores well
 
@@ -142,9 +140,12 @@ pip install 'psycopg[binary]'
 python scripts/compute_load_fingerprint.py --output etl/LOAD_PROOF.json
 ```
 
+Use `--anchor-date YYYY-MM-DD` if your scrape day differs from today (must match
+the anchor shown on `/verify`).
+
 Commit `etl/LOAD_PROOF.json` in your solution repo. It must match your hosted
-database and the data site [verify page](https://otel-hackathon-data-site.vercel.app/verify)
-(including `dataset_revision` when shown). See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
+database and the data site [verify page](https://otel-hackathon-data-site.vercel.app/verify).
+See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
 
 **Phase 1 checklist**
 
@@ -157,13 +158,15 @@ database and the data site [verify page](https://otel-hackathon-data-site.vercel
 
 ## Phase 2 — Tool layer
 
-Implement the three required tools exactly as specified in [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md).
-Ship `tests/test_tools.py` with at least six cases from
+Implement the four required tools exactly as specified in [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md).
+Apply the SQL views in [sql/VIEWS.example.sql](sql/VIEWS.example.sql) (or equivalent
+internal query layer). Ship `tests/test_tools.py` with at least eight cases from
 [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
 
 **Phase 2 checklist**
 
-- [ ] `get_otb_summary`, `get_segment_mix`, `get_pickup_delta` implemented
+- [ ] `get_otb_summary`, `get_segment_mix`, `get_pickup_delta`, `get_block_vs_transient_mix` implemented
+- [ ] Tools query through `vw_stay_night_active` / `vw_segment_stay_night` (or equivalent)
 - [ ] No raw SQL string tools exposed to the model
 - [ ] `tests/test_tools.py` passes locally against your loaded DB
 
@@ -176,7 +179,7 @@ Build the agent with **LangChain Deep Agents** (details below). Phase 3 artifact
 | Artifact | Requirement |
 |----------|-------------|
 | `skills/` | Minimum 4 skills; ≥2 encode **judgment** (thresholds, recommendations), not just metric definitions |
-| `ARCHITECTURE.md` | ≤1 page: why each Deep Agents building block; tool → skill routing |
+| `ARCHITECTURE.md` | ≤1 page: why each Deep Agents building block; tool → skill routing (see [ARCHITECTURE.example.md](ARCHITECTURE.example.md)) |
 | `skills/CHALLENGE_SKILL.md` | Skill pack version `otel-rm-v2` in YAML `description` frontmatter |
 
 ---
@@ -354,7 +357,8 @@ need raw chain-of-thought.
 ```json
 {
   "db_fingerprint": "<reservation_stay_pair_sha256 from LOAD_PROOF>",
-  "dataset_revision": "<from data site /verify when available>"
+  "anchor_date": "<anchor_date from LOAD_PROOF /verify>",
+  "total_stay_rows": "<total_stay_rows from LOAD_PROOF>"
 }
 ```
 
@@ -457,7 +461,8 @@ This dataset is designed to help a GM understand:
 The dataset currently contains:
 
 - **4 tables**
-- **455 rows** in the main fact table: `reservations_hackathon`
+- **stay-date rows** in `reservations_hackathon` — count is **anchor-dependent**;
+  reconcile against `/verify` on scrape day (see [§15](#15-dataset-shape))
 - lookup tables for room types, market segments, and channels
 
 ### Tables
@@ -885,7 +890,7 @@ These are the kinds of questions the Revenue Manager agent should handle.
 
 ### Examples
 
-* What revenue is on the books by month?
+* What revenue is on the books by month? (sum `daily_room_revenue` by stay month — see [§8.5](#85-know-which-revenue-field-you-need) for column names)
 * Which segments are driving July?
 * How much of July is group business?
 * Are we too dependent on OTA?
@@ -932,10 +937,39 @@ Think: what would a sharp revenue manager say in a morning briefing?
 
 ## 15. Dataset shape
 
+Lookup row counts are fixed. Fact-table stay rows depend on the site's anchor date.
+
 * `room_type_lookup`: 3 rows
 * `market_code_lookup`: 10 rows
 * `channel_code_lookup`: 4 rows
-* `reservations_hackathon`: 455 rows
+* `reservations_hackathon`: reconcile `total_stay_rows` with `/verify` on scrape day
+
+Do not assume static fact-table counts from earlier brief versions.
+
+---
+
+## Appendix A — OTB defaults
+
+**Default on-the-books (OTB)** for future stay-date analysis (matches `/verify`):
+
+1. `reservation_status = 'Reserved'`
+2. `stay_date >= anchor_date` (anchor shown on `/verify` and your `LOAD_PROOF`)
+
+Exclude `Cancelled` unless the question is explicitly about cancellations. State
+your assumption when a question is ambiguous.
+
+---
+
+## Appendix B — Date fields
+
+| Field | Use for |
+|-------|---------|
+| `stay_date` | Revenue-on-stay, monthly OTB, segment mix by stay month |
+| `create_datetime` | Pickup, booking pace, “what was booked recently” |
+| `cancellation_datetime` | Point-in-time OTB reconstructions |
+
+**Pickup windows (`get_pickup_delta`):** `create_datetime` defines the booking
+window — not `stay_date`.
 
 ---
 

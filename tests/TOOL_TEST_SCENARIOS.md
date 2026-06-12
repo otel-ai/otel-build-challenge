@@ -89,3 +89,40 @@ Assume a **correct ETL load** of the hackathon dataset into Postgres.
 - Every reservation on the data site list has been opened on its detail page during ETL
 - `company_name` and `rate_plan_code` are populated where the site shows them
 - Row count matches the `/verify` page after a full pagination pass
+
+---
+
+## Scenario 8 — Block shares sum to one
+
+**Tool:** `get_block_vs_transient_mix("2025-07", exclude_cancelled=True)`
+
+**Properties:**
+
+- `share_of_room_nights_block + share_of_room_nights_transient == 1.0` ± 1e-6
+- `share_of_revenue_block + share_of_revenue_transient == 1.0` ± 1e-6
+- `block_room_nights + transient_room_nights == denominator_room_nights`
+
+---
+
+## Scenario 9 — OTB room nights match segment total
+
+**Tools:** `get_otb_summary("2025-07")` and `get_segment_mix("2025-07")`
+
+**Properties:**
+
+- `get_otb_summary.room_nights == sum(segment.room_nights)` across all segments
+  returned by `get_segment_mix` for the same month (same cancellation filter)
+
+---
+
+## Scenario 10 — `/verify` reconciliation
+
+**Tool:** ad hoc check after ETL (not necessarily a named tool)
+
+**Properties:**
+
+- `total_stay_rows` in your DB equals `total_stay_rows` on `/verify` for your scrape anchor date
+- `otb_room_nights` in your DB equals `/verify` → `otb_room_nights` (same anchor)
+- Record `anchor_date` in `LOAD_PROOF.json` and health endpoint
+
+Document how you scraped `/verify` (browser automation or manual cross-check).
