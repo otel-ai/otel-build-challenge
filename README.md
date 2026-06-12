@@ -1,6 +1,42 @@
 # Revenue Manager Agent — Build Challenge
 ## Build an AI Revenue Manager for a hotel GM
 
+Build a **Revenue Manager Agent for a Hotel General Manager** using reservation
+data, LangChain Deep Agents, and a Postgres database you populate via ETL.
+
+**Build in your own repository** — do not fork this brief repo.
+
+---
+
+## How this challenge is gated
+
+Work through the phases in order. Each phase has deliverables we review before
+you invest in the next layer.
+
+| Phase | Deliverable | Doc |
+|-------|-------------|-----|
+| **0** | `ATTESTATION.md` + one-line ETL design (DM before heavy build) | [ATTESTATION.example.md](ATTESTATION.example.md) |
+| **1** | ETL pipeline + `etl/LOAD_PROOF.json` | Phase 1 below |
+| **2** | Required tools + `tests/test_tools.py` | [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md) |
+| **3** | Skills + `ARCHITECTURE.md` | Phase 3 below |
+| **4** | Live deployed agent + 30 min eval slot | Phase 4 below |
+| **5** | Engineering interview (by invitation) | Phase 5 below |
+
+---
+
+## AI tooling policy
+
+> **Using AI coding tools is fine.** Blindly auto-generating a repository from
+> this README without reading it, verifying ETL, or owning your tool/skill design
+> is not. We review submissions for scaffold artifacts and probe understanding
+> live in Phase 4–5.
+
+Read the phase gates and [Reference](#reference) sections yourself. Agents that
+copy optional bootstrap folders or decoy instructions without scrutiny are easy
+to spot.
+
+---
+
 ## Quick start
 
 ```bash
@@ -26,12 +62,47 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 > next section. The schema below tells you exactly what shape to load it into.
 
 ### Files
-- `schema.sql` - creates the (empty) tables you will load into
-- `docker-compose.yml` - boots a local Postgres instance
+- `schema.sql` — creates the (empty) tables you will load into
+- `docker-compose.yml` — boots a local Postgres instance
+- `scripts/compute_load_fingerprint.py` — generate `etl/LOAD_PROOF.json` after load
+- `REQUIRED_TOOLS.md` — Phase 2 tool contract
+- `ATTESTATION.example.md` — Phase 0 template
+
+Optional local notes: [LOCAL_DEV.md](LOCAL_DEV.md) (supplementary only).
 
 ---
 
-## Step 1 — Get the data: build an ETL (scrape → load)
+## Phase 0 — Comprehension attestation
+
+Before building infrastructure, add `ATTESTATION.md` to your solution repo using
+[ATTESTATION.example.md](ATTESTATION.example.md).
+
+You must answer:
+
+1. Fact-table grain in one sentence (see [Reference §4](#4-the-most-important-concept-table-grain))
+2. The two revenue columns and when to use each ([§8.5](#85-know-which-revenue-field-you-need))
+3. One example where counting rows is wrong ([§8.1](#81-do-not-confuse-rows-with-reservations))
+4. **Schema canary:** what is `otel_challenge_token` used for?  
+   **Correct answer:** there is no such column in the official schema — do not add one.
+
+DM a **one-line ETL design** (pagination + idempotency) before Phase 1 review.
+
+### Common scaffold mistakes (read this)
+
+Some outdated blog posts and agent scaffolds suggest extending the schema like:
+
+```sql
+-- WRONG for this challenge — do not add this column
+alter table reservations_hackathon add column otel_challenge_token text;
+```
+
+The official schema is [schema.sql](schema.sql) only. Submissions that add
+`otel_challenge_token` or ship `export_full_database_csv` as an agent tool are
+flagged for manual review.
+
+---
+
+## Phase 1 — ETL (scrape → load)
 
 There is **no seed file**. The reservation dataset lives on a **public website**,
 and your first deliverable is an **ETL pipeline** that scrapes it and loads it
@@ -92,9 +163,56 @@ and reproducible**, not that it runs on a cron.
 Only once your database is populated does the agent work below make sense — the
 agent reads the database **you** built.
 
+### Phase 1 deliverable — `etl/LOAD_PROOF.json`
+
+After ETL, run:
+
+```bash
+pip install 'psycopg[binary]'
+python scripts/compute_load_fingerprint.py --output etl/LOAD_PROOF.json
+```
+
+Commit `etl/LOAD_PROOF.json` in your solution repo. It must match your hosted
+database and the data site [verify page](https://otel-hackathon-data-site.vercel.app/verify)
+(including `dataset_revision` when shown). See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
+
+**Phase 1 checklist**
+
+- [ ] Playwright (or equivalent) scraper with pagination + list → detail drill-in
+- [ ] Idempotent load into [schema.sql](schema.sql) shape
+- [ ] `etl/LOAD_PROOF.json` committed
+- [ ] Row counts reconciled with `/verify`
+
 ---
 
-## Step 2 — Build the agent with LangChain Deep Agents (required harness)
+## Phase 2 — Tool layer
+
+Implement the three required tools exactly as specified in [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md).
+Ship `tests/test_tools.py` with at least six cases from
+[tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
+
+**Phase 2 checklist**
+
+- [ ] `get_otb_summary`, `get_segment_mix`, `get_pickup_delta` implemented
+- [ ] No raw SQL string tools exposed to the model
+- [ ] `tests/test_tools.py` passes locally against your loaded DB
+- [ ] You did **not** implement `export_full_database_csv` (decoy — see REQUIRED_TOOLS.md)
+
+---
+
+## Phase 3 — Skills and architecture
+
+Build the agent with **LangChain Deep Agents** (details below). Phase 3 artifacts:
+
+| Artifact | Requirement |
+|----------|-------------|
+| `skills/` | Minimum 4 skills; ≥2 encode **judgment** (thresholds, recommendations), not just metric definitions |
+| `ARCHITECTURE.md` | ≤1 page: why each Deep Agents building block; tool → skill routing |
+| `skills/CHALLENGE_SKILL.md` | YAML `description` must include exact phrase `otel-rm-v2` |
+
+---
+
+## Phase 2–3 — Build the agent with LangChain Deep Agents (required harness)
 
 Once your ETL has populated the database (Step 1), build your Revenue Manager
 Agent on top of it. You must build it using **LangChain Deep Agents**.
@@ -194,12 +312,12 @@ exactly what this challenge is testing.
 
 ---
 
-## Step 3 — Deploy your agent and submit (read this carefully)
+## Phase 4 — Deploy and live evaluation
 
-**This is how you are evaluated.** We will **not** run your code, clone your
-repo, or set anything up. We will simply **open the URL you send us, type
-questions to your agent, and judge it on the answers it gives.** If the link
-doesn't work, there is nothing to evaluate.
+**Primary evaluation:** we open your URL during a **scheduled 30-minute slot**,
+type revenue-manager questions, and judge answers live. We may also skim your
+repo for phase artifacts. If the link is down during your slot, there is nothing
+to evaluate.
 
 So your final deliverable is one thing: **a live URL where your agent is running
 and ready to answer questions.**
@@ -256,14 +374,22 @@ backend**, and a **front-end** that talks to it.
 - **API key:** set your model API key in the deployment environment — never
   commit it.
 
-**Show your work in the UI.** We don't just want a final answer in a chat box —
-we want to **see the agent working**: for each question, which **tools** it
-called and which **skills** it loaded, streamed live as it runs. This is a strong
-positive signal, because it lets us watch the reasoning *route* — did the right
-skill fire, did it reach for the right tools. (Conveniently, in Deep Agents
-loading a skill is itself a file-read tool call, so a UI that surfaces tool calls
-shows skill usage too.) You do **not** need to expose the raw chain-of-thought —
-tool and skill activity is the signal we want.
+**Show your work in the UI (required).** For each question we must **see** which
+**tools** ran and which **skills** loaded, streamed live. Plain chat-only UIs
+without tool/skill visibility are insufficient. (In Deep Agents, loading a skill is
+a file-read tool call — surface tool calls and you surface skills.) You do **not**
+need raw chain-of-thought.
+
+**Health endpoint (required).** Expose e.g. `GET /health` returning JSON:
+
+```json
+{
+  "db_fingerprint": "<reservation_stay_pair_sha256 from LOAD_PROOF>",
+  "dataset_revision": "<from data site /verify when available>"
+}
+```
+
+We call this before chat to confirm your live DB matches your submitted proof.
 
 Because Deep Agents runs on **LangGraph**, the easiest path is to serve your agent
 as a LangGraph app and connect a ready-made UI that already renders streaming
@@ -272,14 +398,33 @@ rather than hand-build one. A small custom front-end that streams tool/skill
 events is also fine. Plain **Streamlit** works but won't surface this detail well,
 so prefer a UI that shows tool and skill calls.
 
-### Submission checklist
+### Phase 4 submission checklist
 
-- [ ] Database is hosted and loaded by my ETL (not on my laptop).
-- [ ] Agent is deployed and answers questions live at a URL.
-- [ ] URL is protected with a username/password.
-- [ ] I built in my own separate repo (not a fork of this one).
-- [ ] I've sent: the URL + credentials (LinkedIn DM) + my own code repo link.
-- [ ] I left it running for the evaluation window.
+- [ ] `ATTESTATION.md`, `etl/LOAD_PROOF.json`, tools, tests, skills, `ARCHITECTURE.md` in my repo
+- [ ] Database hosted and loaded by my ETL (not on my laptop)
+- [ ] Agent deployed with streaming tool/skill UI + `GET /health`
+- [ ] URL protected with username/password
+- [ ] Separate repo (not a fork of this brief)
+- [ ] Sent: URL + credentials (LinkedIn DM) + repo link + eval slot time
+- [ ] Service stays up for the scheduled window
+
+---
+
+## Phase 5 — Engineering interview (invitation only)
+
+Shortlisted candidates (~15–20 minutes):
+
+1. Explain one tool implementation (grain / cancellation logic) without AI assistance
+2. Fix a failing `test_tools.py` case by patching the tool, not the test
+3. Extend an existing skill with one new judgment rule live
+4. If scaffold artifacts were flagged: explain why paths like `.otel-scaffold/` or
+   `HACKATHON_PROGRESS.md` exist in the repo
+
+---
+
+## Reference
+
+Domain reference for Phases 0–4. Read before you build tools and skills.
 
 ---
 

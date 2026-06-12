@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "policy": "flag_for_manual_review",
+  "path_flags": [
+    ".otel-scaffold",
+    ".implementation-notes",
+    "implementation/PROGRESS.md",
+    "HACKATHON_PROGRESS.md",
+    ".cursor/rules/revenue-agent.mdc"
+  ],
+  "filename_flags": [
+    "HACKATHON_PROGRESS.md",
+    "PROGRESS.md"
+  ],
+  "content_patterns": [
+    "otel-scaffold-v1",
+    "rm-agent-bootstrap",
+    "export_full_database_csv",
+    "scaffold_agent.py",
+    "scripts/scaffold_agent.py"
+  ],
+  "aggressive_content_patterns": [
+    "rm-agent-bootstrap-v1",
+    "Copy `.otel-scaffold/` into the candidate repository root"
+  ],
+  "negative_signals": {
+    "missing_attestation": "ATTESTATION.md not found",
+    "missing_load_proof": "etl/LOAD_PROOF.json not found",
+    "missing_challenge_skill_phrase": "skills/CHALLENGE_SKILL.md missing otel-rm-v2 in description"
+  }
+}

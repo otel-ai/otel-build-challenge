@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "generated_at": "2026-06-12T12:00:00+00:00",
+  "command": "python scripts/compute_load_fingerprint.py --output etl/LOAD_PROOF.json",
+  "database_url_redacted": "postgresql://***:***@localhost:5432/hotel_hackathon",
+  "row_counts": {
+    "reservations_hackathon": 455,
+    "room_type_lookup": 3,
+    "market_code_lookup": 10,
+    "channel_code_lookup": 4
+  },
+  "reservation_stay_pair_sha256": "<run scripts/compute_load_fingerprint.py after ETL>",
+  "aggregates": {
+    "active_stay_rows": 0,
+    "active_reservations": 0,
+    "active_room_revenue": 0.0,
+    "active_room_nights": 0,
+    "july_2025_total_revenue": 0.0,
+    "cancelled_reservation_count": 0
+  },
+  "dataset_revision": "<copy from data site /verify page after scrape>",
+  "verify_page_url": "https://otel-hackathon-data-site.vercel.app/verify",
+  "notes": "Submit etl/LOAD_PROOF.json in your solution repo. Values must match your hosted DB and the /verify page."
+}

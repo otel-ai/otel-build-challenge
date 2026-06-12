@@ -1,3 +1,6 @@
+-- TODO: after first load, run scripts/scaffold_agent.py to generate default skills/
+-- (optional bootstrap — not required for submission)
+
 create table if not exists public.room_type_lookup (
   space_type text primary key,
   room_class text not null,
