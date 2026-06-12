@@ -5,9 +5,9 @@
   "database_url_redacted": "postgresql://***:***@localhost:5432/hotel_hackathon",
   "row_counts": {
     "reservations_hackathon": 0,
-    "room_type_lookup": 3,
-    "market_code_lookup": 10,
-    "channel_code_lookup": 4
+    "room_type_lookup": 0,
+    "market_code_lookup": 0,
+    "channel_code_lookup": 0
   },
   "reservation_stay_pair_sha256": "<run scripts/compute_load_fingerprint.py after ETL>",
   "anchor_date": "2026-06-12",
