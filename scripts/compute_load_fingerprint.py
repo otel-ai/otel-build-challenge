@@ -5,7 +5,6 @@ Compute a deterministic load fingerprint after ETL.
 Usage:
   python scripts/compute_load_fingerprint.py
   python scripts/compute_load_fingerprint.py --output etl/LOAD_PROOF.json
-  python scripts/compute_load_fingerprint.py --anchor-date 2026-06-12
   python scripts/compute_load_fingerprint.py --manifest etl/SCRAPE_MANIFEST.json
 
 Requires psycopg (pip install psycopg[binary]) or set DATABASE_URL.
@@ -19,12 +18,22 @@ import hashlib
 import json
 import os
 import sys
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 DEFAULT_DATABASE_URL = (
     "postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon"
 )
+
+TABLES = [
+    "reservations_hackathon",
+    "room_type_lookup",
+    "rate_plan_lookup",
+    "market_code_lookup",
+    "market_macro_group_history",
+    "channel_code_lookup",
+    "load_manifest",
+]
 
 
 def connect(database_url: str):
@@ -39,15 +48,9 @@ def connect(database_url: str):
 
 
 def fetch_row_counts(conn) -> dict[str, int]:
-    tables = [
-        "reservations_hackathon",
-        "room_type_lookup",
-        "market_code_lookup",
-        "channel_code_lookup",
-    ]
     counts: dict[str, int] = {}
     with conn.cursor() as cur:
-        for table in tables:
+        for table in TABLES:
             cur.execute(f"select count(*) from public.{table}")
             row = cur.fetchone()
             counts[table] = int(row[0]) if row else 0
@@ -58,100 +61,75 @@ def fetch_pair_hash(conn) -> str:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select reservation_id, stay_date::text
+            select reservation_id, stay_date::text, financial_status
             from public.reservations_hackathon
-            order by reservation_id, stay_date
+            order by reservation_id, stay_date, financial_status
             """
         )
         lines = [
-            f"{reservation_id}|{stay_date}"
-            for reservation_id, stay_date in cur.fetchall()
+            f"{reservation_id}|{stay_date}|{financial_status}"
+            for reservation_id, stay_date, financial_status in cur.fetchall()
         ]
     payload = "\n".join(lines).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
-def fetch_verify_fields(conn, anchor_date: date) -> dict[str, Any]:
-    """Fields that map to the data site /verify page."""
+def fetch_latest_manifest(conn) -> dict[str, Any]:
     with conn.cursor() as cur:
-        cur.execute("select count(*) from public.reservations_hackathon")
-        total_stay_rows = int(cur.fetchone()[0])
-
-        cur.execute(
-            "select count(distinct reservation_id) from public.reservations_hackathon"
-        )
-        total_reservations = int(cur.fetchone()[0])
-
         cur.execute(
             """
-            select count(distinct reservation_id)
-            from public.reservations_hackathon
-            where reservation_status = 'Cancelled'
+            select dataset_revision, row_hash, scraped_at::text
+            from public.load_manifest
+            order by load_id desc
+            limit 1
             """
         )
-        cancelled_reservations = int(cur.fetchone()[0])
-
-        cur.execute(
-            """
-            select coalesce(sum(number_of_spaces), 0)
-            from public.reservations_hackathon
-            where reservation_status = 'Reserved'
-              and stay_date >= %s
-            """,
-            (anchor_date,),
-        )
-        otb_room_nights = int(cur.fetchone()[0])
-
-        cur.execute(
-            """
-            select coalesce(sum(daily_room_revenue_before_tax), 0)::numeric(14, 2)
-            from public.reservations_hackathon
-            where reservation_status = 'Reserved'
-              and stay_date >= %s
-            """,
-            (anchor_date,),
-        )
-        otb_room_revenue = float(cur.fetchone()[0])
-
-        cur.execute(
-            """
-            select coalesce(sum(daily_total_revenue_before_tax), 0)::numeric(14, 2)
-            from public.reservations_hackathon
-            where reservation_status = 'Reserved'
-              and stay_date >= %s
-            """,
-            (anchor_date,),
-        )
-        otb_total_revenue = float(cur.fetchone()[0])
-
+        row = cur.fetchone()
+    if not row:
+        return {
+            "dataset_revision": None,
+            "row_hash": None,
+            "scraped_at": None,
+        }
+    dataset_revision, row_hash, scraped_at = row
     return {
-        "anchor_date": anchor_date.isoformat(),
-        "total_stay_rows": total_stay_rows,
-        "total_reservations": total_reservations,
-        "cancelled_reservations": cancelled_reservations,
-        "otb_room_nights": otb_room_nights,
-        "otb_room_revenue_before_tax": otb_room_revenue,
-        "otb_total_revenue_before_tax": otb_total_revenue,
+        "dataset_revision": dataset_revision,
+        "row_hash": row_hash,
+        "scraped_at": scraped_at,
     }
 
 
 def fetch_aggregates(conn) -> dict[str, Any]:
-    """Legacy aggregates for cross-checks (not all appear on /verify)."""
+    """Aggregates candidates should reconcile with the data site /verify page."""
     with conn.cursor() as cur:
         cur.execute(
             """
             select
-              count(*) filter (where reservation_status <> 'Cancelled') as active_stay_rows,
-              count(distinct reservation_id)
-                filter (where reservation_status <> 'Cancelled') as active_reservations,
+              count(*) filter (
+                where reservation_status <> 'Cancelled'
+                  and financial_status = 'Posted'
+              ) as posted_stay_rows,
+              count(distinct reservation_id) filter (
+                where reservation_status <> 'Cancelled'
+                  and financial_status = 'Posted'
+              ) as posted_reservations,
               coalesce(
-                sum(daily_room_revenue_before_tax)
-                  filter (where reservation_status <> 'Cancelled'),
+                sum(number_of_spaces) filter (
+                  where reservation_status <> 'Cancelled'
+                    and financial_status = 'Posted'
+                ),
                 0
-              )::numeric(14, 2) as active_room_revenue,
+              ) as posted_otb_room_nights,
+              count(*) filter (where financial_status = 'Provisional') as provisional_row_count,
               coalesce(
-                sum(number_of_spaces)
-                  filter (where reservation_status <> 'Cancelled'),
+                sum(daily_room_revenue_before_tax) filter (
+                  where reservation_status <> 'Cancelled'
+                    and financial_status = 'Posted'
+                ),
+                0
+              )::numeric(14, 2) as posted_room_revenue,
+              coalesce(
+                sum(number_of_spaces) filter (where reservation_status <> 'Cancelled'),
                 0
               ) as active_room_nights
             from public.reservations_hackathon
@@ -161,13 +139,21 @@ def fetch_aggregates(conn) -> dict[str, Any]:
         if row is None:
             raise RuntimeError("Failed to compute aggregates")
 
-        active_stay_rows, active_reservations, active_room_revenue, active_room_nights = row
+        (
+            posted_stay_rows,
+            posted_reservations,
+            posted_otb_room_nights,
+            provisional_row_count,
+            posted_room_revenue,
+            active_room_nights,
+        ) = row
 
         cur.execute(
             """
             select coalesce(sum(daily_total_revenue_before_tax), 0)::numeric(14, 2)
             from public.reservations_hackathon
             where reservation_status <> 'Cancelled'
+              and financial_status = 'Posted'
               and stay_date >= date '2025-07-01'
               and stay_date < date '2025-08-01'
             """
@@ -189,13 +175,28 @@ def fetch_aggregates(conn) -> dict[str, Any]:
             int(cancelled_reservations_row[0]) if cancelled_reservations_row else 0
         )
 
+        cur.execute(
+            """
+            select count(*)
+            from public.reservations_hackathon
+            where property_date <> stay_date
+            """
+        )
+        property_date_mismatch_row = cur.fetchone()
+        property_date_mismatch_count = (
+            int(property_date_mismatch_row[0]) if property_date_mismatch_row else 0
+        )
+
     return {
-        "active_stay_rows": int(active_stay_rows),
-        "active_reservations": int(active_reservations),
-        "active_room_revenue": float(active_room_revenue),
+        "posted_stay_rows": int(posted_stay_rows),
+        "posted_reservations": int(posted_reservations),
+        "posted_otb_room_nights": int(posted_otb_room_nights),
+        "provisional_row_count": int(provisional_row_count),
+        "posted_room_revenue": float(posted_room_revenue),
         "active_room_nights": int(active_room_nights),
-        "july_2025_total_revenue": july_total_revenue,
+        "july_2025_posted_total_revenue": july_total_revenue,
         "cancelled_reservation_count": cancelled_reservations,
+        "property_date_mismatch_count": property_date_mismatch_count,
     }
 
 
@@ -246,41 +247,32 @@ def validate_manifest(
 def build_fingerprint(
     database_url: str,
     command: str,
-    anchor_date: date,
     manifest_path: str | None = None,
 ) -> dict[str, Any]:
     with connect(database_url) as conn:
         row_counts = fetch_row_counts(conn)
         pair_hash = fetch_pair_hash(conn)
-        verify_fields = fetch_verify_fields(conn, anchor_date)
         aggregates = fetch_aggregates(conn)
+        manifest = fetch_latest_manifest(conn)
         manifest_check: dict[str, Any] | None = None
         if manifest_path:
             manifest_check = validate_manifest(conn, manifest_path)
 
     result: dict[str, Any] = {
-        "version": 1.1,
+        "version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "command": command,
         "database_url_redacted": redact_database_url(database_url),
         "row_counts": row_counts,
-        "reservation_stay_pair_sha256": pair_hash,
-        **verify_fields,
+        "reservation_stay_status_sha256": pair_hash,
+        "dataset_revision": manifest["dataset_revision"],
+        "load_manifest_row_hash": manifest["row_hash"],
+        "load_manifest_scraped_at": manifest["scraped_at"],
         "aggregates": aggregates,
         "verify_page_url": "https://otel-hackathon-data-site.vercel.app/verify",
-        "verify_field_map": {
-            "anchor_date": "/verify → anchor_date",
-            "total_stay_rows": "/verify → total_stay_rows",
-            "total_reservations": "/verify → total_reservations",
-            "cancelled_reservations": "/verify → cancelled_reservations",
-            "otb_room_nights": "/verify → otb_room_nights",
-            "otb_room_revenue_before_tax": "/verify → otb_room_revenue_before_tax",
-            "otb_total_revenue_before_tax": "/verify → otb_total_revenue_before_tax",
-            "reservation_stay_pair_sha256": "pair hash of reservation_id|stay_date (not shown on /verify UI)",
-        },
         "notes": (
-            "Compare verify fields against the data site /verify page on the same "
-            "anchor date as your scrape. Row counts in row_counts must match your DB."
+            "Compare row_counts and aggregates against the data site /verify page. "
+            "dataset_revision must match the latest load_manifest row and the site."
         ),
     }
     if manifest_check is not None:
@@ -298,22 +290,12 @@ def redact_database_url(database_url: str) -> str:
     return f"***@{suffix}"
 
 
-def parse_anchor_date(value: str | None) -> date:
-    if value:
-        return date.fromisoformat(value)
-    return datetime.now(timezone.utc).date()
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--database-url",
         default=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
         help="Postgres connection string (default: docker-compose local DB)",
-    )
-    parser.add_argument(
-        "--anchor-date",
-        help="Anchor date YYYY-MM-DD (default: today UTC; must match /verify)",
     )
     parser.add_argument(
         "--manifest",
@@ -326,11 +308,9 @@ def main() -> None:
     args = parser.parse_args()
 
     command = " ".join(sys.argv)
-    anchor = parse_anchor_date(args.anchor_date)
     fingerprint = build_fingerprint(
         args.database_url,
         command,
-        anchor,
         manifest_path=args.manifest,
     )
 

@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 DATA_SITE_URL = "https://otel-hackathon-data-site.vercel.app"
-DATA_SITE_ROUTES = ("/", "/reservations", "/verify", "/reference")
+DATA_SITE_ROUTES = ("/", "/reservations", "/verify", "/reference", "/changelog")
 DEFAULT_DB_URL = "postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon"
 
 
@@ -37,10 +37,10 @@ def check_json_examples() -> list[str]:
 
     for key in (
         "version",
-        "reservation_stay_pair_sha256",
-        "anchor_date",
-        "total_stay_rows",
-        "verify_field_map",
+        "reservation_stay_status_sha256",
+        "dataset_revision",
+        "row_counts",
+        "aggregates",
     ):
         if key not in load_proof:
             errors.append(f"LOAD_PROOF.example.json missing key: {key}")
@@ -60,6 +60,12 @@ def check_json_examples() -> list[str]:
                 f"LOAD_PROOF.example row_counts.{table} should be 0 in template (got {count})"
             )
 
+    for key, value in load_proof.get("aggregates", {}).items():
+        if value != 0:
+            errors.append(
+                f"LOAD_PROOF.example aggregates.{key} should be 0 in template (got {value})"
+            )
+
     return errors
 
 
@@ -72,18 +78,21 @@ def check_tools_and_schema() -> list[str]:
         "get_otb_summary",
         "get_segment_mix",
         "get_pickup_delta",
+        "get_as_of_otb",
         "get_block_vs_transient_mix",
     ):
         if tool not in required_tools:
             errors.append(f"REQUIRED_TOOLS.md missing {tool}")
 
-    if "is_block" not in schema:
-        errors.append("schema.sql missing is_block")
+    if "financial_status" not in schema:
+        errors.append("schema.sql missing financial_status")
+    if "load_manifest" not in schema:
+        errors.append("schema.sql missing load_manifest")
     if "METRIC_DEFINITIONS.md" not in required_tools:
         errors.append("REQUIRED_TOOLS.md missing METRIC_DEFINITIONS.md requirement")
 
     views = (ROOT / "sql/VIEWS.example.sql").read_text()
-    if "vw_stay_night_active" not in views or "vw_segment_stay_night" not in views:
+    if "vw_stay_night_base" not in views or "vw_segment_stay_night" not in views:
         errors.append("sql/VIEWS.example.sql missing required views")
 
     return errors
@@ -218,14 +227,14 @@ def check_docker_compose() -> list[str]:
                 "-d",
                 "hotel_hackathon",
                 "-tAc",
-                "select count(*) from public.vw_stay_night_active",
+                "select count(*) from public.vw_stay_night_base",
             ],
             cwd=ROOT,
             capture_output=True,
             text=True,
         )
         if row_counts.returncode != 0:
-            errors.append(f"vw_stay_night_active query failed: {row_counts.stderr.strip()}")
+            errors.append(f"vw_stay_night_base query failed: {row_counts.stderr.strip()}")
     finally:
         subprocess.run(
             ["docker", "compose", "down"],

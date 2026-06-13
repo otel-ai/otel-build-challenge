@@ -51,7 +51,7 @@ Assume a **correct ETL load** of the hackathon dataset into Postgres.
 **Properties:**
 
 - Filtered total `room_nights` ≤ unfiltered total `room_nights`
-- Every returned segment has `macro_group == "Retail"`
+- Every returned segment has effective `macro_group == "Retail"`
 
 ---
 
@@ -80,49 +80,50 @@ Assume a **correct ETL load** of the hackathon dataset into Postgres.
 
 ---
 
-## Scenario 7 (bonus) — Detail-page completeness
+## Scenario 7 — Detail-page completeness
 
 **Tool:** ad hoc query or extended tool test
 
 **Properties:**
 
 - Every reservation on the data site list has been opened on its detail page during ETL
-- `company_name` and `rate_plan_code` are populated where the site shows them
+- `company_name`, `rate_plan_code`, `financial_status`, and `property_date` populated where the site shows them
 - Row count matches the `/verify` page after a full pagination pass
+- `load_manifest` has at least one row with `dataset_revision` matching `/verify`
 
 ---
 
-## Scenario 8 — Block shares sum to one
+## Scenario 8 — Provisional exclusion from default OTB
 
-**Tool:** `get_block_vs_transient_mix("2025-07", exclude_cancelled=True)`
+**Tool:** `get_otb_summary("2025-08")` vs raw count including `financial_status = 'Provisional'`
 
 **Properties:**
 
-- `share_of_room_nights_block + share_of_room_nights_transient == 1.0` ± 1e-6
-- `share_of_revenue_block + share_of_revenue_transient == 1.0` ± 1e-6
-- `block_room_nights + transient_room_nights == denominator_room_nights`
+- Default OTB `row_count` is strictly less than rows with only `Cancelled` excluded
+  when provisional rows exist in that month
+- `provisional_row_count` in `LOAD_PROOF.json` is > 0 after ETL
 
 ---
 
-## Scenario 9 — OTB room nights match segment total
+## Scenario 9 — As-of snapshot differs from current OTB
 
-**Tools:** `get_otb_summary("2025-07")` and `get_segment_mix("2025-07")`
+**Tool:** `get_as_of_otb("2025-08", as_of_utc="2025-05-01T12:00:00Z")`
 
 **Properties:**
 
-- `get_otb_summary.room_nights == sum(segment.room_nights)` across all segments
-  returned by `get_segment_mix` for the same month (same cancellation filter)
+- Result may differ from `get_otb_summary("2025-08")` when cancellations or bookings
+  occurred after `as_of_utc`
+- Cancelled reservations with `cancellation_datetime <= as_of_utc` are excluded
+- Bookings with `create_datetime > as_of_utc` are excluded
 
 ---
 
-## Scenario 10 — `/verify` reconciliation
+## Scenario 10 — Property date vs stay date
 
-**Tool:** ad hoc check after ETL (not necessarily a named tool)
+**Tool:** ad hoc SQL on loaded data
 
 **Properties:**
 
-- `total_stay_rows` in your DB equals `total_stay_rows` on `/verify` for your scrape anchor date
-- `otb_room_nights` in your DB equals `/verify` → `otb_room_nights` (same anchor)
-- Record `anchor_date` in `LOAD_PROOF.json` and health endpoint
-
-Document how you scraped `/verify` (browser automation or manual cross-check).
+- `property_date_mismatch_count` in `LOAD_PROOF.json` matches rows where
+  `property_date <> stay_date`
+- Tools that filter on `stay_month` use `stay_date`, not `property_date`, unless documented

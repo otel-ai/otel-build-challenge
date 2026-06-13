@@ -39,25 +39,37 @@ Is there an `otel_challenge_token` column in the official schema? If so, what is
 
 > Your answer:
 
-### 5. Stay date vs booking date
+### 5. Default OTB filters
 
-When would you use `stay_date` vs `create_datetime`?
+Which `reservation_status` and `financial_status` values are excluded from default OTB?
 
 > Your answer:
 
-### 6. Block vs transient
+### 6. Stay date vs property date
+
+When can `property_date` differ from `stay_date`, and which field drives monthly OTB?
+
+> Your answer:
+
+### 7. Point-in-time OTB
+
+How does `as_of_utc` change which cancelled rows are included in `get_as_of_otb`?
+
+> Your answer:
+
+### 8. Block vs transient
 
 How does `is_block` affect a “group vs transient mix” question?
 
 > Your answer:
 
-### 7. List pagination
+### 9. List pagination
 
 How many reservations does the data site show per list page?
 
 > Your answer:
 
-### 8. Pagination completeness
+### 10. Pagination completeness
 
 How will you prove you did not miss the last list page during ETL?
 

@@ -12,7 +12,9 @@ Assume a **correct scrape → load** of the hackathon dataset into Postgres.
 **Properties:**
 
 - `room_type_lookup`: 3 rows
+- `rate_plan_lookup`: 8 rows
 - `market_code_lookup`: 10 rows
+- `market_macro_group_history`: 11 rows
 - `channel_code_lookup`: 4 rows
 
 ---
@@ -34,7 +36,8 @@ Assume a **correct scrape → load** of the hackathon dataset into Postgres.
   `count(distinct reservation_id)` in the fact table
 - `total_stay_rows` in your DB equals `total_stay_rows` on `/verify` for the
   manifest `anchor_date`
-- Optional: recompute `reservation_ids_sha256` from DB and assert it matches the manifest
+- `dataset_revision` in `load_manifest` matches `/verify` → `dataset_revision`
+- `reservation_stay_status_sha256` in `LOAD_PROOF` matches `/verify` when loaded
 
 ---
 

@@ -3,27 +3,32 @@
 Your Revenue Manager Agent must expose a **deliberate tool surface**. Handing the
 model a single `run_sql(query)` tool is an automatic fail.
 
-Implement the four tools below with these **exact names** and semantics. How you
+Implement the five tools below with these **exact names** and semantics. How you
 structure modules, types, and database access is your choice.
+
+## Semantic views (required first)
+
+Create and apply the views in [sql/VIEWS.example.sql](sql/VIEWS.example.sql) (or
+equivalent) in your database **before** implementing tools. Document them in
+`ARCHITECTURE.md`.
+
+Required tools must read from:
+
+- `vw_stay_night_base` — default OTB grain and filters
+- `vw_segment_stay_night` — stay-night grain with stay-date-effective `macro_group`
+
+Do **not** query `reservations_hackathon` directly from agent-facing tools.
 
 ## General rules
 
 - Tools must **not** accept arbitrary SQL strings from the model.
 - Each tool docstring must state the **grain** of every count and sum it returns.
-- Default behaviour for OTB-style questions: **exclude** `reservation_status = 'Cancelled'`
-  unless the tool argument explicitly includes them.
+- Default OTB filters: exclude `reservation_status = 'Cancelled'` **and**
+  `financial_status = 'Provisional'` unless the tool argument or question explicitly
+  includes tentative/provisional business.
 - Room nights = `sum(number_of_spaces)` at stay-date grain unless documented otherwise.
 - Reservation count = `count(distinct reservation_id)` at the filtered grain.
-- **Query through views:** implement tools against
-  [sql/VIEWS.example.sql](sql/VIEWS.example.sql) (`vw_stay_night_active`,
-  `vw_segment_stay_night`) or an internal query layer with the same filters and
-  joins. Do not expose raw table scans to the model.
-
-Apply the views after `schema.sql`:
-
-```bash
-psql "$DATABASE_URL" -f sql/VIEWS.example.sql
-```
+- Pickup booking windows use **Europe/London** local midnight boundaries, stored/compared in UTC.
 
 ---
 
@@ -33,6 +38,8 @@ psql "$DATABASE_URL" -f sql/VIEWS.example.sql
 def get_otb_summary(stay_month: str, exclude_cancelled: bool = True) -> dict:
     """
     On-the-books summary for a calendar month of stay dates (YYYY-MM).
+
+    Default universe: vw_stay_night_base (Posted, non-cancelled).
 
     Returns:
       - stay_month
@@ -57,15 +64,15 @@ def get_segment_mix(
     macro_group: str | None = None,
 ) -> dict:
     """
-  Segment mix for a stay month.
+  Segment mix for a stay month using vw_segment_stay_night.
 
   Returns a list of segments with:
-    - market_code, market_name, macro_group
+    - market_code, market_name, macro_group (effective_macro_group)
     - room_nights, total_revenue
     - share_of_room_nights (0–1, denominator = all segments in scope)
     - share_of_revenue (0–1, same denominator)
 
-  If macro_group is set, filter to that macro_group only.
+  If macro_group is set, filter to that effective macro_group only.
   """
 ```
 
@@ -84,8 +91,8 @@ def get_pickup_delta(
     """
   Booking pace / pickup for future stays.
 
-  booking_window_days: include reservations whose create_datetime falls in
-    [now - booking_window_days, now] (UTC).
+  booking_window_days: reservations whose create_datetime falls in the window
+    [start_of_day_london(now - days), now] converted to UTC.
   future_stay_from: ISO date; only stay_date >= this date.
 
   Uses create_datetime for the booking window — not stay_date.
@@ -101,33 +108,39 @@ def get_pickup_delta(
 
 ---
 
-## 4. `get_block_vs_transient_mix`
+## 4. `get_as_of_otb`
 
 ```python
-def get_block_vs_transient_mix(
-    stay_month: str,
-    exclude_cancelled: bool = True,
-) -> dict:
+def get_as_of_otb(stay_month: str, as_of_utc: str) -> dict:
     """
-  Block vs transient room-night and revenue mix for a stay month (YYYY-MM).
+  Point-in-time on-the-books for stay_date month as known at as_of_utc.
 
-  Uses is_block on the fact table:
-    - block: is_block = true
-    - transient: is_block = false
+  Include a stay row when:
+    - create_datetime <= as_of_utc
+    - and (reservation_status <> 'Cancelled' OR cancellation_datetime > as_of_utc)
+    - and financial_status = 'Posted' (provisional excluded unless you document otherwise)
 
-  Returns:
-    - stay_month, exclude_cancelled
-    - block_room_nights, transient_room_nights
-    - block_total_revenue, transient_total_revenue
-    - share_of_room_nights_block (0–1)
-    - share_of_room_nights_transient (0–1)
-    - share_of_revenue_block (0–1)
-    - share_of_revenue_transient (0–1)
-    - denominator_room_nights, denominator_revenue (state explicitly)
-    """
+  Same return shape as get_otb_summary plus as_of_utc echo.
+  """
 ```
 
-**Grain note:** room nights = `sum(number_of_spaces)` at stay-date grain within the month.
+---
+
+## 5. `get_block_vs_transient_mix`
+
+```python
+def get_block_vs_transient_mix(stay_month: str) -> dict:
+    """
+  Block vs transient mix for a stay month (vw_stay_night_base).
+
+  Returns:
+    - block_room_nights, transient_room_nights
+    - block_total_revenue, transient_total_revenue
+    - block_share_of_room_nights, block_share_of_revenue
+    - top_companies: top 3 company_name by total_revenue (null -> 'Transient')
+    - top3_company_revenue_share (0–1 of month total revenue)
+  """
+```
 
 ---
 
@@ -135,27 +148,27 @@ def get_block_vs_transient_mix(
 
 Add `tests/test_tools.py` in your solution repo with **at least eight** test cases.
 We publish property-based scenarios in [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
-Your tests should encode those properties against your loaded database (or fixtures
-derived from a correct ETL load).
-
-## Metric definitions (required)
-
-Add `tools/METRIC_DEFINITIONS.md` (≤ half page) defining in your own words:
-
-- **OTB** (default filters — see README Appendix A)
-- **Room nights**
-- **Block vs transient**
-- **Pickup window** (booking date vs stay date — see Appendix B)
-
-Reference cancellation defaults and which date fields you use.
 
 ---
 
 ## Submission checklist (Phase 2)
 
-- [ ] Four required tools implemented with exact names
-- [ ] `tools/METRIC_DEFINITIONS.md` committed
-- [ ] Tools query through `vw_stay_night_active` / `vw_segment_stay_night` (or equivalent)
+- [ ] `vw_stay_night_base` and `vw_segment_stay_night` created and documented
+- [ ] Five required tools implemented with exact names
 - [ ] No raw SQL string parameter on any agent-facing tool
 - [ ] `tests/test_tools.py` with ≥ 8 cases covering published scenarios
+- [ ] `tools/METRIC_DEFINITIONS.md` committed (≤ half page; see below)
 - [ ] Tool module(s) importable without starting the agent server
+
+---
+
+## Metric definitions (required)
+
+Add `tools/METRIC_DEFINITIONS.md` (≤ half page) defining in your own words:
+
+- **Room nights** vs **stay rows** vs **reservations**
+- Default **OTB** filters (`reservation_status`, `financial_status`, anchor date)
+- **Pickup** window boundaries (`Europe/London` vs UTC storage)
+- How **effective macro group** differs from static `market_code_lookup.macro_group`
+
+This file is reviewed in Phase 2 — not optional boilerplate.

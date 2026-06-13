@@ -61,6 +61,7 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 - `schema.sql` — creates the (empty) tables you will load into
 - `docker-compose.yml` — boots a local Postgres instance
 - `scripts/compute_load_fingerprint.py` — generate `etl/LOAD_PROOF.json` after load
+- `sql/VIEWS.example.sql` — semantic view templates for Phase 2
 - `REQUIRED_TOOLS.md` — Phase 2 tool contract
 - `ATTESTATION.example.md` — Phase 0 template
 
@@ -71,7 +72,7 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 Before building infrastructure, add `ATTESTATION.md` to your solution repo using
 [ATTESTATION.example.md](ATTESTATION.example.md).
 
-You must answer all comprehension prompts (1–8) in
+You must answer all comprehension prompts (1–10) in
 [ATTESTATION.example.md](ATTESTATION.example.md).
 
 **Do not start heavy ETL or agent build until Phase 0 DM review** — send your
@@ -94,12 +95,13 @@ at a database somebody else filled.
 > [**reservation list**](https://otel-hackathon-data-site.vercel.app/reservations),
 > a **detail page per reservation** (`/reservations/<id>`), a
 > [**reference page**](https://otel-hackathon-data-site.vercel.app/reference)
-> with the lookup tables, and a
+> with lookup tables (room types, markets, channels, **rate plans**, and
+> market macro-group effective dates), and a
 > [**verify page**](https://otel-hackathon-data-site.vercel.app/verify) you can
-> use to check your load. There is no JSON API and no CSV download; you have to
-> scrape the rendered pages. The data is also **client-rendered** (delivered by
-> the page's JavaScript, not in the initial HTML), so a plain `curl` returns an
-> empty shell — drive a real browser.
+> use to check your load. The site footer links to a **dataset changelog** —
+> read it if your scrape predates a deploy. There is no JSON API and no CSV
+> download; scrape the rendered pages. Data is **client-rendered**, so plain
+> `curl` returns an empty shell — drive a real browser.
 
 ### What "ETL" means here
 
@@ -111,11 +113,13 @@ at a database somebody else filled.
    stay rows and the fields that only appear on the detail view.
 2. **Transform** — parse the scraped HTML into clean, typed records that match
    `schema.sql`: the **fact table** is one row per **reservation × stay_date**
-   (see Section 4 — grain is the whole game), plus the three **lookup tables**
-   (room types, market codes, channels) from the reference page.
-3. **Load** — insert into the Postgres tables from the Quick start. Make the load
-   **idempotent** (e.g. upsert on the primary keys / truncate-and-reload) so you
-   can safely re-run it without creating duplicates.
+   (see Section 4 — grain is the whole game), plus **lookup tables** and
+   `market_macro_group_history` from the reference page. Detail pages carry
+   `financial_status`, `property_date`, and fields not shown on the list view.
+3. **Load** — insert into the Postgres tables from the Quick start. Append a row
+   to `load_manifest` on every run (`dataset_revision`, `scraped_at`, `source_url`,
+   `row_hash`). Make the load **idempotent** (truncate-and-reload or upsert) so you
+   can safely re-run without duplicates.
 
 ### How often it runs
 
@@ -190,6 +194,7 @@ See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
 
 - [ ] Playwright (or equivalent) scraper with pagination + list → detail drill-in
 - [ ] Idempotent load into [schema.sql](schema.sql) shape
+- [ ] `load_manifest` populated on every ETL run
 - [ ] `etl/SCRAPE_MANIFEST.json` committed
 - [ ] `etl/LOAD_PROOF.json` committed
 - [ ] `tests/test_etl.py` with ≥ 3 cases from [tests/ETL_TEST_SCENARIOS.md](tests/ETL_TEST_SCENARIOS.md)
@@ -199,16 +204,15 @@ See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
 
 ## Phase 2 — Tool layer
 
-Implement the four required tools exactly as specified in [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md).
-Apply the SQL views in [sql/VIEWS.example.sql](sql/VIEWS.example.sql) (or equivalent
-internal query layer). Ship `tests/test_tools.py` with at least eight cases from
-[tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
+Implement the five required tools and semantic views exactly as specified in
+[REQUIRED_TOOLS.md](REQUIRED_TOOLS.md). Ship `tests/test_tools.py` with at least
+eight cases from [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
 
 **Phase 2 checklist**
 
-- [ ] `get_otb_summary`, `get_segment_mix`, `get_pickup_delta`, `get_block_vs_transient_mix` implemented
+- [ ] `vw_stay_night_base` and `vw_segment_stay_night` applied (see [sql/VIEWS.example.sql](sql/VIEWS.example.sql))
+- [ ] All five required tools implemented
 - [ ] `tools/METRIC_DEFINITIONS.md` committed (see [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md))
-- [ ] Tools query through `vw_stay_night_active` / `vw_segment_stay_night` (or equivalent)
 - [ ] No raw SQL string tools exposed to the model
 - [ ] `tests/test_tools.py` passes locally against your loaded DB
 
@@ -220,7 +224,7 @@ Build the agent with **LangChain Deep Agents** (details below). Phase 3 artifact
 
 | Artifact | Requirement |
 |----------|-------------|
-| `skills/` | Minimum 4 skills; ≥2 encode **judgment** (thresholds, recommendations), not just metric definitions; **≥1 skill** must include a numeric threshold and recommended action |
+| `skills/` | Minimum 5 skills; ≥2 encode **judgment** (thresholds, recommendations), not just metric definitions; **≥1 skill** must include a numeric threshold and recommended action |
 | `ARCHITECTURE.md` | ≤1 page: why each Deep Agents building block; **name which tool each skill routes to** (see [ARCHITECTURE.example.md](ARCHITECTURE.example.md)) |
 | `skills/CHALLENGE_SKILL.md` | Skill pack version `otel-rm-v2` in YAML `description` frontmatter |
 
@@ -264,10 +268,10 @@ for each. We are not prescribing *how* — designing the solution is the point.
 |---|---|---|
 | **Tools** | Custom `@tool` functions you pass to the agent | A deliberately designed tool surface — you decide what the tools are, their arguments, and their return shapes (see the principle in 0.6). |
 | **Skills** | On-demand `SKILL.md` files loaded via progressive disclosure | Skills are the heart of this challenge (see 0.7). We judge their **depth and attention to detail** directly. |
-| **Subagents** | Specialised agents spawned via the built-in task tool | Delegate focused work to subagents with isolated context where it genuinely helps. |
+| **Subagents** | Specialised agents spawned via the built-in task tool | Route segment-mix work to a segment-focused subagent; delegate other focused tasks where isolated context helps. |
 | **Planning** | Built-in todo / planning tooling | Let the agent decompose multi-part questions into ordered steps. |
 | **Memory / Filesystem** | Virtual filesystem + a long-term store | Persist intermediate work and hold a real multi-turn conversation. |
-| **Human-in-the-loop** | Approval interrupts | Gate anything sensitive or expensive behind an approval step. |
+| **Human-in-the-loop** | Approval interrupts | Gate `get_as_of_otb` (and any other expensive point-in-time rebuild) behind approval. |
 | **Model & system prompt** | `model=...`, `system_prompt=...` | A sharp revenue-manager persona that holds the answer style in Section 12. |
 | **MCP (bonus)** | External tool servers via MCP | Optional. |
 
@@ -398,9 +402,10 @@ need raw chain-of-thought.
 
 ```json
 {
-  "db_fingerprint": "<reservation_stay_pair_sha256 from LOAD_PROOF>",
-  "anchor_date": "<anchor_date from LOAD_PROOF /verify>",
-  "total_stay_rows": "<total_stay_rows from LOAD_PROOF>"
+  "db_fingerprint": "<reservation_stay_status_sha256 from LOAD_PROOF>",
+  "dataset_revision": "<from load_manifest /verify>",
+  "row_hash": "<load_manifest row_hash>",
+  "financial_status_posted_only_rows": "<posted_stay_rows from LOAD_PROOF aggregates>"
 }
 ```
 
@@ -502,16 +507,19 @@ This dataset is designed to help a GM understand:
 
 The dataset currently contains:
 
-- **4 tables**
+- **7 tables** (see [schema.sql](schema.sql))
 - **stay-date rows** in `reservations_hackathon` — count is **anchor-dependent**;
   reconcile against `/verify` on scrape day (see [§15](#15-dataset-shape))
-- lookup tables for room types, market segments, and channels
+- lookup tables for room types, rate plans, market segments (with effective-dated macro groups), and channels
 
 ### Tables
 - `public.reservations_hackathon`
 - `public.room_type_lookup`
+- `public.rate_plan_lookup`
 - `public.market_code_lookup`
+- `public.market_macro_group_history`
 - `public.channel_code_lookup`
+- `public.load_manifest`
 
 ---
 
@@ -627,6 +635,11 @@ Almost all GM questions will be answered primarily from this table.
 - The specific night represented by this row
 - This is the most important date for revenue-on-stay analysis
 
+#### `property_date`
+- Type: `date`
+- Hotel business date attributed to this stay row (from the detail page)
+- Usually equals `stay_date`; may differ on night-boundary / audit rows — see Appendix B
+
 #### `reservation_status`
 - Type: `text`
 - Example values include:
@@ -635,14 +648,20 @@ Almost all GM questions will be answered primarily from this table.
 - Use this carefully in analysis
 - Many business questions should exclude cancelled reservations unless explicitly asked
 
+#### `financial_status`
+- Type: `text`
+- Values: `Posted`, `Provisional`
+- See Appendix A for default OTB treatment
+
 #### `create_datetime`
 - Type: `timestamptz`
-- When the reservation was created
+- When the reservation was created (**stored in UTC**)
 - Use this for:
   - booking pace
   - pickup analysis
   - “as of” views
   - “what changed recently?”
+- Pickup window boundaries: see Appendix B (`Europe/London`)
 
 #### `cancellation_datetime`
 - Type: `timestamptz`, nullable
@@ -851,6 +870,31 @@ One row per channel code.
 
 ---
 
+## 6.5 `public.rate_plan_lookup`
+
+Lookup for `rate_plan_code` (reference page → Rate plans tab).
+
+| Column | Description |
+|--------|-------------|
+| `rate_plan_code` | Primary key; FK from fact table |
+| `plan_family` | e.g. Retail, Group, Corporate |
+| `is_commissionable` | Channel economics flag |
+
+---
+
+## 6.6 `public.market_macro_group_history`
+
+Effective-dated macro group per `market_code`. Join on `stay_date` between
+`valid_from` and `valid_to` (null `valid_to` = open-ended).
+
+---
+
+## 6.7 `public.load_manifest`
+
+One row per ETL execution: `dataset_revision`, `scraped_at`, `source_url`, `row_hash`.
+
+---
+
 ## 7. Relationship diagram
 
 ### Main joins
@@ -858,8 +902,15 @@ One row per channel code.
 #### Room type
 `reservations_hackathon.space_type = room_type_lookup.space_type`
 
+#### Rate plan
+`reservations_hackathon.rate_plan_code = rate_plan_lookup.rate_plan_code`
+
 #### Market segment
 `reservations_hackathon.market_code = market_code_lookup.market_code`
+
+#### Market macro group (effective)
+`market_macro_group_history.market_code = reservations_hackathon.market_code`
+and `stay_date` overlaps `[valid_from, valid_to)`
 
 #### Channel
 `reservations_hackathon.channel_code = channel_code_lookup.channel_code`
@@ -973,46 +1024,53 @@ Think: what would a sharp revenue manager say in a morning briefing?
 ### Lookup tables
 
 * `room_type_lookup`
+* `rate_plan_lookup`
 * `market_code_lookup`
+* `market_macro_group_history`
 * `channel_code_lookup`
+* `load_manifest`
 
 ---
 
 ## 15. Dataset shape
 
-Lookup row counts are fixed. Fact-table stay rows depend on the site's anchor date.
+After a full load from the current data site:
 
 * `room_type_lookup`: 3 rows
+* `rate_plan_lookup`: 8 rows
 * `market_code_lookup`: 10 rows
+* `market_macro_group_history`: 11 rows
 * `channel_code_lookup`: 4 rows
 * `reservations_hackathon`: reconcile `total_stay_rows` with `/verify` on scrape day
+* `load_manifest`: ≥ 1 row per ETL run
 
-Do not assume static fact-table counts from earlier brief versions.
-
----
-
-## Appendix A — OTB defaults
-
-**Default on-the-books (OTB)** for future stay-date analysis (matches `/verify`):
-
-1. `reservation_status = 'Reserved'`
-2. `stay_date >= anchor_date` (anchor shown on `/verify` and your `LOAD_PROOF`)
-
-Exclude `Cancelled` unless the question is explicitly about cancellations. State
-your assumption when a question is ambiguous.
+Reconcile against `/verify` — do not assume static counts from §3.
 
 ---
 
-## Appendix B — Date fields
+## Appendix A — OTB composition (default filters)
+
+**Default on-the-books (OTB)** for stay-date analysis:
+
+1. Exclude `reservation_status = 'Cancelled'` unless the question is explicitly about cancellations.
+2. Exclude `financial_status = 'Provisional'` unless the question asks for tentative / unposted / “all committed” business including provisional rows.
+
+Posted + non-cancelled is the usual GM briefing universe. State your assumption when a question is ambiguous.
+
+---
+
+## Appendix B — Dates, time zones, and property date
 
 | Field | Use for |
 |-------|---------|
 | `stay_date` | Revenue-on-stay, monthly OTB, segment mix by stay month |
-| `create_datetime` | Pickup, booking pace, “what was booked recently” |
-| `cancellation_datetime` | Point-in-time OTB reconstructions |
+| `create_datetime` | Pickup, booking pace, “what was booked recently” (UTC storage) |
+| `property_date` | Hotel business-date attribution when it differs from `stay_date` |
+| `cancellation_datetime` | Point-in-time OTB (`get_as_of_otb`) |
 
-**Pickup windows (`get_pickup_delta`):** `create_datetime` defines the booking
-window — not `stay_date`.
+**Pickup windows (`get_pickup_delta`):** interpret `booking_window_days` using **Europe/London** local midnight as window boundaries, then compare against `create_datetime` in UTC.
+
+**Segment macro groups:** join `market_macro_group_history` on `stay_date` overlapping `[valid_from, valid_to)` — do not use a static `macro_group` from `market_code_lookup` alone when history rows exist (e.g. `PROM` reclassified mid-year on the reference page).
 
 ---
 
