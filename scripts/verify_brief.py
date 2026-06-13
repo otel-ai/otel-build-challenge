@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Smoke and integration checks for the challenge brief repository."""
+"""Smoke checks for the challenge brief (public repository only)."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import subprocess
 import sys
@@ -19,6 +18,18 @@ DATA_SITE_URL = "https://otel-hackathon-data-site.vercel.app"
 DATA_SITE_ROUTES = ("/", "/reservations", "/verify", "/reference", "/changelog")
 DEFAULT_DB_URL = "postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon"
 
+# Grading artifacts belong in otel-build-challenge-candidate-pack (private).
+GATED_PATHS = (
+    "ATTESTATION.example.md",
+    "CONTRIBUTING.md",
+    "tests/TOOL_TEST_SCENARIOS.md",
+    "tests/ETL_TEST_SCENARIOS.md",
+    "etl/LOAD_PROOF.example.json",
+    "etl/SCRAPE_MANIFEST.example.json",
+    "scripts/compute_load_fingerprint.py",
+    ".otel-scaffold",
+)
+
 
 def check_tracked_files_exist() -> list[str]:
     errors: list[str] = []
@@ -30,42 +41,15 @@ def check_tracked_files_exist() -> list[str]:
     return errors
 
 
-def check_json_examples() -> list[str]:
+def check_no_gated_files() -> list[str]:
     errors: list[str] = []
-    load_proof = json.loads((ROOT / "etl/LOAD_PROOF.example.json").read_text())
-    manifest = json.loads((ROOT / "etl/SCRAPE_MANIFEST.example.json").read_text())
-
-    for key in (
-        "version",
-        "reservation_stay_status_sha256",
-        "dataset_revision",
-        "row_counts",
-        "aggregates",
-    ):
-        if key not in load_proof:
-            errors.append(f"LOAD_PROOF.example.json missing key: {key}")
-
-    for key in (
-        "anchor_date",
-        "pages_scraped",
-        "reservation_ids_count",
-        "reservation_ids_sha256",
-    ):
-        if key not in manifest:
-            errors.append(f"SCRAPE_MANIFEST.example.json missing key: {key}")
-
-    for table, count in load_proof.get("row_counts", {}).items():
-        if count != 0:
-            errors.append(
-                f"LOAD_PROOF.example row_counts.{table} should be 0 in template (got {count})"
-            )
-
-    for key, value in load_proof.get("aggregates", {}).items():
-        if value != 0:
-            errors.append(
-                f"LOAD_PROOF.example aggregates.{key} should be 0 in template (got {value})"
-            )
-
+    tracked = subprocess.check_output(
+        ["git", "ls-files"], cwd=ROOT, text=True
+    ).strip().splitlines()
+    for rel in tracked:
+        for gated in GATED_PATHS:
+            if rel == gated or rel.startswith(gated.rstrip("/") + "/"):
+                errors.append(f"gated file must not be public: {rel}")
     return errors
 
 
@@ -94,6 +78,10 @@ def check_tools_and_schema() -> list[str]:
     views = (ROOT / "sql/VIEWS.example.sql").read_text()
     if "vw_stay_night_base" not in views or "vw_segment_stay_night" not in views:
         errors.append("sql/VIEWS.example.sql missing required views")
+
+    readme = (ROOT / "README.md").read_text()
+    if "candidate pack" not in readme.lower():
+        errors.append("README.md should mention the private candidate pack for Phase 0")
 
     return errors
 
@@ -125,17 +113,16 @@ def check_markdown_links() -> list[str]:
 
 def check_python_compile() -> list[str]:
     errors: list[str] = []
-    for pattern in ("scripts/*.py", ".otel-scaffold/scripts/*.py"):
-        for path in ROOT.glob(pattern):
-            try:
-                subprocess.run(
-                    [sys.executable, "-m", "py_compile", str(path)],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-            except subprocess.CalledProcessError as exc:
-                errors.append(f"{path.relative_to(ROOT)}: {exc.stderr.strip()}")
+    for path in ROOT.glob("scripts/*.py"):
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "py_compile", str(path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            errors.append(f"{path.relative_to(ROOT)}: {exc.stderr.strip()}")
     return errors
 
 
@@ -176,23 +163,6 @@ def check_docker_compose() -> list[str]:
         return errors
 
     try:
-        fp = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts/compute_load_fingerprint.py"),
-                "--database-url",
-                DEFAULT_DB_URL,
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-        )
-        if fp.returncode != 0:
-            errors.append(
-                "compute_load_fingerprint.py failed: "
-                f"{fp.stderr.strip() or fp.stdout.strip()}"
-            )
-
         apply_views = subprocess.run(
             [
                 "docker",
@@ -295,7 +265,7 @@ def main() -> int:
     parser.add_argument(
         "--with-db",
         action="store_true",
-        help="Run docker compose + fingerprint + views (implies --full)",
+        help="Run docker compose + views (implies --full)",
     )
     args = parser.parse_args()
     if args.with_db:
@@ -303,7 +273,7 @@ def main() -> int:
 
     checks: list[tuple[str, Callable[[], list[str]]]] = [
         ("tracked files", check_tracked_files_exist),
-        ("json examples", check_json_examples),
+        ("no gated files in public repo", check_no_gated_files),
         ("tools and schema", check_tools_and_schema),
         ("markdown links", check_markdown_links),
         ("python compile", check_python_compile),

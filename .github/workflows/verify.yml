@@ -17,8 +17,5 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install psycopg
-        run: pip install 'psycopg[binary]'
-
       - name: Run all checks
         run: python scripts/verify_brief.py --with-db

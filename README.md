@@ -15,7 +15,7 @@ you invest in the next layer.
 
 | Phase | Deliverable | Doc |
 |-------|-------------|-----|
-| **0** | `ATTESTATION.md` + one-line ETL design (DM before heavy build) | [ATTESTATION.example.md](ATTESTATION.example.md) |
+| **0** | `ATTESTATION.md` + one-line ETL design (DM before heavy build) | Candidate pack (Phase 0) |
 | **1** | ETL pipeline + `etl/LOAD_PROOF.json` + `etl/SCRAPE_MANIFEST.json` | Phase 1 below |
 | **2** | Required tools + `tests/test_tools.py` | [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md) |
 | **3** | Skills + `ARCHITECTURE.md` | Phase 3 below |
@@ -30,6 +30,13 @@ you invest in the next layer.
   the brief as a single codegen prompt.
 - Coding assistants are fine. Submitted artifacts must match the **live data site**
   and the ETL **you** built.
+
+### Candidate pack (Phase 0 — not public)
+
+Grading templates, attestation prompts, test scenarios, fingerprint script, and
+optional agent scaffold are **not** in this repository. After you express interest,
+**DM us on LinkedIn** for Phase 0 review — we will share the private candidate
+pack (read-only repo access or zip). Do not start heavy ETL until Phase 0 is approved.
 
 ---
 
@@ -60,20 +67,21 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 ### Files
 - `schema.sql` — creates the (empty) tables you will load into
 - `docker-compose.yml` — boots a local Postgres instance
-- `scripts/compute_load_fingerprint.py` — generate `etl/LOAD_PROOF.json` after load
 - `sql/VIEWS.example.sql` — semantic view templates for Phase 2
 - `REQUIRED_TOOLS.md` — Phase 2 tool contract
-- `ATTESTATION.example.md` — Phase 0 template
+- `ARCHITECTURE.example.md` — Phase 3 architecture template
+
+Attestation template, ETL/tool test scenarios, `LOAD_PROOF` examples, and the
+fingerprint script are in the **candidate pack** (shared after Phase 0 DM).
 
 ---
 
 ## Phase 0 — Comprehension attestation
 
-Before building infrastructure, add `ATTESTATION.md` to your solution repo using
-[ATTESTATION.example.md](ATTESTATION.example.md).
+Before building infrastructure, complete `ATTESTATION.md` in your solution repo
+using the template from the **candidate pack** (shared after you DM us for Phase 0).
 
-You must answer all comprehension prompts (1–10) in
-[ATTESTATION.example.md](ATTESTATION.example.md).
+You must answer all comprehension prompts in that template.
 
 **Do not start heavy ETL or agent build until Phase 0 DM review** — send your
 completed `ATTESTATION.md` and one-line ETL design first.
@@ -151,7 +159,9 @@ agent reads the database **you** built.
 #### `etl/SCRAPE_MANIFEST.json`
 
 After scraping, commit a manifest proving you captured the full reservation list.
-See [etl/SCRAPE_MANIFEST.example.json](etl/SCRAPE_MANIFEST.example.json).
+Shape and fields are documented in the **candidate pack** (`etl/SCRAPE_MANIFEST.example.json`).
+
+Required fields include:
 
 ```json
 {
@@ -168,7 +178,8 @@ line). It must match `count(distinct reservation_id)` in your DB and
 
 #### `etl/LOAD_PROOF.json`
 
-After ETL, run:
+After ETL, generate a load proof using `scripts/compute_load_fingerprint.py` from
+the **candidate pack** (copy into your repo or run against your `DATABASE_URL`):
 
 ```bash
 pip install 'psycopg[binary]'
@@ -183,12 +194,9 @@ python scripts/compute_load_fingerprint.py \
   --output etl/LOAD_PROOF.json
 ```
 
-Use `--anchor-date YYYY-MM-DD` if your scrape day differs from today (must match
-the anchor shown on `/verify`).
-
 Commit `etl/LOAD_PROOF.json` in your solution repo. It must match your hosted
 database and the data site [verify page](https://otel-hackathon-data-site.vercel.app/verify).
-See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
+Example shape is in the candidate pack (`etl/LOAD_PROOF.example.json`).
 
 **Phase 1 checklist**
 
@@ -197,7 +205,7 @@ See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
 - [ ] `load_manifest` populated on every ETL run
 - [ ] `etl/SCRAPE_MANIFEST.json` committed
 - [ ] `etl/LOAD_PROOF.json` committed
-- [ ] `tests/test_etl.py` with ≥ 3 cases from [tests/ETL_TEST_SCENARIOS.md](tests/ETL_TEST_SCENARIOS.md)
+- [ ] `tests/test_etl.py` with ≥ 3 cases covering published ETL scenarios (candidate pack)
 - [ ] Row counts reconciled with `/verify`
 
 ---
@@ -206,7 +214,7 @@ See [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
 
 Implement the five required tools and semantic views exactly as specified in
 [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md). Ship `tests/test_tools.py` with at least
-eight cases from [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
+eight cases covering the published tool scenarios in the **candidate pack**.
 
 **Phase 2 checklist**
 
