@@ -8,6 +8,24 @@ data, LangChain Deep Agents, and a Postgres database you populate via ETL.
 
 ---
 
+## How to start
+
+1. **Create your own repo** for the solution (do not fork this brief).
+2. **Read this README** and skim [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md) and the
+   [data site](https://otel-hackathon-data-site.vercel.app) (your scrape target).
+3. **Request the Phase 0 candidate pack** — attestation template, test scenarios,
+   fingerprint script, and examples are **not** in this public repo. DM **Manoj**
+   ([LinkedIn](https://www.linkedin.com/in/manoj07ar/)) or **Nikhil** on LinkedIn
+   with your solution repo URL. We will share the private pack (read-only repo
+   access or zip).
+4. **Complete Phase 0** — fill `ATTESTATION.md` (from the pack) and send a
+   **one-line ETL design** (pagination + idempotency + anchor date). Wait for
+   approval before heavy ETL or agent work.
+5. **Questions or blockers** at any phase — use the same LinkedIn DM. We do not
+   monitor GitHub issues on this repository.
+
+---
+
 ## How this challenge is gated
 
 Work through the phases in order. Each phase has deliverables we review before
@@ -33,10 +51,9 @@ you invest in the next layer.
 
 ### Candidate pack (Phase 0 — not public)
 
-Grading templates, attestation prompts, test scenarios, fingerprint script, and
-optional agent scaffold are **not** in this repository. After you express interest,
-**DM us on LinkedIn** for Phase 0 review — we will share the private candidate
-pack (read-only repo access or zip). Do not start heavy ETL until Phase 0 is approved.
+See [How to start](#how-to-start) — DM **Manoj**
+([LinkedIn](https://www.linkedin.com/in/manoj07ar/)) or **Nikhil** on LinkedIn for
+the private pack. Do not start heavy ETL until Phase 0 is approved.
 
 ---
 
@@ -79,7 +96,7 @@ fingerprint script are in the **candidate pack** (shared after Phase 0 DM).
 ## Phase 0 — Comprehension attestation
 
 Before building infrastructure, complete `ATTESTATION.md` in your solution repo
-using the template from the **candidate pack** (shared after you DM us for Phase 0).
+using the template from the **candidate pack** (see [How to start](#how-to-start)).
 
 You must answer all comprehension prompts in that template.
 
