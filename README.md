@@ -35,7 +35,7 @@ Work through the phases in order. Deliverables are checked objectively (tests,
 |-------|-------------|-----|
 | **0** | `ATTESTATION.md` (comprehension + one-line ETL note) | [ATTESTATION.example.md](ATTESTATION.example.md) |
 | **1** | ETL pipeline + `etl/LOAD_PROOF.json` + `etl/SCRAPE_MANIFEST.json` | Phase 1 below |
-| **2** | Required tools + `tests/test_tools.py` | [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md) |
+| **2** | Required tools + `tests/test_tools.py` + `tests/test_skills.py` + `tests/test_agent.py` | [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md) |
 | **3** | Skills + `ARCHITECTURE.md` | Phase 3 below |
 | **4** | Live deployed agent + submission | [SUBMISSION.md](SUBMISSION.md) |
 | **5** | Engineering interview (by invitation) | Phase 5 below |
@@ -85,6 +85,7 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 - `ATTESTATION.example.md` — Phase 0 attestation template
 - `scripts/compute_load_fingerprint.py` — generate `etl/LOAD_PROOF.json` after load
 - `tests/ETL_TEST_SCENARIOS.md`, `tests/TOOL_TEST_SCENARIOS.md` — published test properties
+- `tests/SKILL_TEST_SCENARIOS.md`, `tests/AGENT_TEST_SCENARIOS.md` — skill & agent tests
 - `etl/LOAD_PROOF.example.json`, `etl/SCRAPE_MANIFEST.example.json` — proof shapes
 - `SUBMISSION.md` — how to submit when done
 
@@ -225,8 +226,14 @@ Example shape is in [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
 ## Phase 2 — Tool layer
 
 Implement the five required tools and semantic views exactly as specified in
-[REQUIRED_TOOLS.md](REQUIRED_TOOLS.md). Ship `tests/test_tools.py` with at least
-eight cases covering the [published tool scenarios](tests/TOOL_TEST_SCENARIOS.md).
+[REQUIRED_TOOLS.md](REQUIRED_TOOLS.md). Ship:
+
+- `tests/test_tools.py` — **≥ 10** cases covering [tool scenarios](tests/TOOL_TEST_SCENARIOS.md)
+- `tests/test_skills.py` — **≥ 5** cases covering [skill scenarios](tests/SKILL_TEST_SCENARIOS.md)
+- `tests/test_agent.py` — **≥ 4** cases covering [agent scenarios](tests/AGENT_TEST_SCENARIOS.md)
+
+Skill and agent tests should use **structure mocks and graph introspection** where
+possible — not live LLM calls in CI.
 
 **Phase 2 checklist**
 
@@ -234,7 +241,7 @@ eight cases covering the [published tool scenarios](tests/TOOL_TEST_SCENARIOS.md
 - [ ] All five required tools implemented
 - [ ] `tools/METRIC_DEFINITIONS.md` committed (see [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md))
 - [ ] No raw SQL string tools exposed to the model
-- [ ] `tests/test_tools.py` passes locally against your loaded DB
+- [ ] `tests/test_tools.py`, `tests/test_skills.py`, `tests/test_agent.py` pass locally
 
 ---
 
@@ -244,9 +251,11 @@ Build the agent with **LangChain Deep Agents** (details below). Phase 3 artifact
 
 | Artifact | Requirement |
 |----------|-------------|
-| `skills/` | Minimum 5 skills; ≥2 encode **judgment** (thresholds, recommendations), not just metric definitions; **≥1 skill** must include a numeric threshold and recommended action |
-| `ARCHITECTURE.md` | ≤1 page: why each Deep Agents building block; **name which tool each skill routes to** (see [ARCHITECTURE.example.md](ARCHITECTURE.example.md)) |
+| `skills/` | Minimum **6** skills; **≥3** encode **judgment** (thresholds + recommended actions), not just metric definitions; **≥1** skill must include a numeric threshold and recommended action |
+| `ARCHITECTURE.md` | ≤1 page: skill→tool routing matrix; **required** subagent + HITL on `get_as_of_otb` (see [ARCHITECTURE.example.md](ARCHITECTURE.example.md)) |
 | `skills/CHALLENGE_SKILL.md` | Skill pack version `otel-rm-v2` in YAML `description` frontmatter |
+| `tests/test_skills.py` | ≥5 structural/judgment tests per [tests/SKILL_TEST_SCENARIOS.md](tests/SKILL_TEST_SCENARIOS.md) |
+| `tests/test_agent.py` | ≥4 routing/HITL tests per [tests/AGENT_TEST_SCENARIOS.md](tests/AGENT_TEST_SCENARIOS.md) |
 
 ---
 
@@ -288,10 +297,10 @@ for each. We are not prescribing *how* — designing the solution is the point.
 |---|---|---|
 | **Tools** | Custom `@tool` functions you pass to the agent | A deliberately designed tool surface — you decide what the tools are, their arguments, and their return shapes (see the principle in 0.6). |
 | **Skills** | On-demand `SKILL.md` files loaded via progressive disclosure | Skills are the heart of this challenge (see 0.7). We judge their **depth and attention to detail** directly. |
-| **Subagents** | Specialised agents spawned via the built-in task tool | Route segment-mix work to a segment-focused subagent; delegate other focused tasks where isolated context helps. |
-| **Planning** | Built-in todo / planning tooling | Let the agent decompose multi-part questions into ordered steps. |
-| **Memory / Filesystem** | Virtual filesystem + a long-term store | Persist intermediate work and hold a real multi-turn conversation. |
-| **Human-in-the-loop** | Approval interrupts | Gate `get_as_of_otb` (and any other expensive point-in-time rebuild) behind approval. |
+| **Subagents** | Specialised agents spawned via the built-in task tool | **Required:** route segment-mix or block-mix work to a focused subagent (or document equivalent isolated skill routing in tests). |
+| **Planning** | Built-in todo / planning tooling | Let the agent decompose multi-part questions into ordered steps before tool calls. |
+| **Memory / Filesystem** | Virtual filesystem + a long-term store | **Required:** persist multi-turn GM conversation — not stateless single-shot chat. |
+| **Human-in-the-loop** | Approval interrupts | **Required:** gate `get_as_of_otb` (and any other expensive point-in-time rebuild) behind approval. |
 | **Model & system prompt** | `model=...`, `system_prompt=...` | A sharp revenue-manager persona that holds the answer style in Section 12. |
 | **MCP (bonus)** | External tool servers via MCP | Optional. |
 
@@ -312,12 +321,18 @@ decision, and is a large part of what we evaluate.
   the right date and revenue fields (see Sections 4–8).
 - Answers that read like a sharp revenue manager, not a dashboard (Section 12).
 
-**How we test skill depth.** We will ask **deliberately hard questions** that a
-thin skill cannot answer well — questions that require correct decomposition, the
-right judgment call, awareness of a subtle trap in the data, or a non-obvious
-commercial recommendation. A surface-level skill produces a generic or wrong
-answer; a well-crafted one shows real revenue-management thinking. **Your skills
-are graded on what they actually make the agent capable of.**
+**How we test skill and agent depth.**
+
+- **Published test suites:** `tests/test_tools.py` (≥10), `tests/test_skills.py` (≥5),
+  `tests/test_agent.py` (≥4) — scenarios in `tests/*_TEST_SCENARIOS.md`
+- **Structural skill tests** check thresholds, tool routing, and adversarial guardrails
+  without burning API credits
+- **Agent tests** assert HITL on `get_as_of_otb`, subagent routing, and multi-tool plans
+- **Live review** uses Tier D/E questions (OTA dependency, block concentration, adversarial filters)
+
+A surface-level skill produces a generic or wrong answer; a well-crafted one shows real
+revenue-management thinking. **Your skills are graded on what they actually make the
+agent capable of.**
 
 ### 0.6 Design principle: own your correctness (don't lean on raw `run_sql`)
 
@@ -423,7 +438,7 @@ so prefer a UI that shows tool and skill calls.
 
 ### Phase 4 submission checklist
 
-- [ ] `ATTESTATION.md`, `etl/SCRAPE_MANIFEST.json`, `etl/LOAD_PROOF.json`, `tools/METRIC_DEFINITIONS.md`, tools, tests, skills, `ARCHITECTURE.md` in my repo
+- [ ] `ATTESTATION.md`, `etl/SCRAPE_MANIFEST.json`, `etl/LOAD_PROOF.json`, `tools/METRIC_DEFINITIONS.md`, tools, `tests/test_tools.py`, `tests/test_skills.py`, `tests/test_agent.py`, skills, `ARCHITECTURE.md` in my repo
 - [ ] Database hosted and loaded by my ETL (not on my laptop)
 - [ ] Agent deployed with streaming tool/skill UI + `GET /health`
 - [ ] URL protected with username/password

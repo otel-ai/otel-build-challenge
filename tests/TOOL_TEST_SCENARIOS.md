@@ -127,3 +127,28 @@ Assume a **correct ETL load** of the hackathon dataset into Postgres.
 - `property_date_mismatch_count` in `LOAD_PROOF.json` matches rows where
   `property_date <> stay_date`
 - Tools that filter on `stay_month` use `stay_date`, not `property_date`, unless documented
+
+---
+
+## Scenario 11 — Block vs transient mix
+
+**Tool:** `get_block_vs_transient_mix("2025-09")`
+
+**Properties:**
+
+- `block_share_of_room_nights + transient_share` implied totals reconcile:
+  `block_room_nights + transient_room_nights` equals month OTB room nights from
+  `get_otb_summary` ± rounding
+- `block_share_of_room_nights` and `block_share_of_revenue` are each between 0 and 1
+- `top3_company_revenue_share` ≤ 1.0
+- `top_companies` has at most 3 entries, sorted by revenue descending
+
+---
+
+## Scenario 12 — Tool layer isolation
+
+**Properties:**
+
+- All five tools import and run without starting the agent HTTP server
+- No agent-facing tool accepts a free-form SQL string parameter
+- Each tool's docstring mentions **grain** (row vs reservation vs room night)

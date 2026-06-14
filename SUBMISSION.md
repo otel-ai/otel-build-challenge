@@ -9,8 +9,8 @@ but not sufficient** — we run additional internal review on every submission.
    - [ ] `ATTESTATION.md` (from [ATTESTATION.example.md](ATTESTATION.example.md))
    - [ ] `etl/SCRAPE_MANIFEST.json` and `etl/LOAD_PROOF.json`
    - [ ] `tools/METRIC_DEFINITIONS.md` + all five required tools
-   - [ ] `tests/test_etl.py` (≥3 cases) and `tests/test_tools.py` (≥8 cases)
-   - [ ] `skills/` (≥5 skills) and `ARCHITECTURE.md`
+   - [ ] `tests/test_etl.py` (≥3), `tests/test_tools.py` (≥10), `tests/test_skills.py` (≥5), `tests/test_agent.py` (≥4)
+   - [ ] `skills/` (≥6 skills, ≥3 judgment) and `ARCHITECTURE.md` with skill→tool matrix
 2. **Fingerprint match:** run `scripts/compute_load_fingerprint.py` and reconcile
    with [https://otel-hackathon-data-site.vercel.app/verify](https://otel-hackathon-data-site.vercel.app/verify)
    on the same scrape day as your manifest `anchor_date`.

@@ -146,8 +146,18 @@ def get_block_vs_transient_mix(stay_month: str) -> dict:
 
 ## Tests you must ship
 
-Add `tests/test_tools.py` in your solution repo with **at least eight** test cases.
-We publish property-based scenarios in [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
+Add `tests/test_tools.py` with **at least ten** test cases covering the tool
+scenarios in [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md)
+(scenarios 1–6, 8–12 minimum).
+
+Add `tests/test_skills.py` with **at least five** cases covering
+[tests/SKILL_TEST_SCENARIOS.md](tests/SKILL_TEST_SCENARIOS.md).
+
+Add `tests/test_agent.py` with **at least four** cases covering
+[tests/AGENT_TEST_SCENARIOS.md](tests/AGENT_TEST_SCENARIOS.md).
+
+Tool tests must run against your loaded Postgres (or a documented test fixture DB).
+Skill and agent tests may use filesystem / config mocks without LLM API calls.
 
 ---
 
@@ -156,7 +166,9 @@ We publish property-based scenarios in [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL
 - [ ] `vw_stay_night_base` and `vw_segment_stay_night` created and documented
 - [ ] Five required tools implemented with exact names
 - [ ] No raw SQL string parameter on any agent-facing tool
-- [ ] `tests/test_tools.py` with ≥ 8 cases covering published scenarios
+- [ ] `tests/test_tools.py` with ≥ 10 cases covering published tool scenarios
+- [ ] `tests/test_skills.py` with ≥ 5 cases covering published skill scenarios
+- [ ] `tests/test_agent.py` with ≥ 4 cases covering published agent scenarios
 - [ ] `tools/METRIC_DEFINITIONS.md` committed (≤ half page; see below)
 - [ ] Tool module(s) importable without starting the agent server
 

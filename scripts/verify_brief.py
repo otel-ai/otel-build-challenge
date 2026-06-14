@@ -23,6 +23,8 @@ REQUIRED_PUBLIC_PATHS = (
     "SUBMISSION.md",
     "tests/TOOL_TEST_SCENARIOS.md",
     "tests/ETL_TEST_SCENARIOS.md",
+    "tests/SKILL_TEST_SCENARIOS.md",
+    "tests/AGENT_TEST_SCENARIOS.md",
     "etl/LOAD_PROOF.example.json",
     "etl/SCRAPE_MANIFEST.example.json",
     "scripts/compute_load_fingerprint.py",
@@ -99,6 +101,10 @@ def check_tools_and_schema() -> list[str]:
         errors.append("README.md should not reference a separate candidate pack")
     if "SUBMISSION.md" not in readme:
         errors.append("README.md should link to SUBMISSION.md")
+    if "test_skills.py" not in readme:
+        errors.append("README.md should require tests/test_skills.py")
+    if "test_agent.py" not in readme:
+        errors.append("README.md should require tests/test_agent.py")
 
     return errors
 

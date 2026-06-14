@@ -19,31 +19,46 @@ Keep to **one page**.
 
 ## 3. Tool layer
 
-- List the four required tools and which view(s) each uses
-- How cancellation defaults are applied
+- List all **five** required tools and which view(s) each uses
+- How cancellation and provisional defaults are applied
 - Why arbitrary SQL is **not** exposed to the model
+- Link to `tools/METRIC_DEFINITIONS.md` for grain definitions
 
-## 4. Deep Agents wiring
+## 4. Deep Agents wiring (required)
 
-| Building block | Your use |
-|----------------|----------|
-| Tools | |
-| Skills | |
-| Subagents (if any) | |
-| Memory / filesystem | |
-| Human-in-the-loop (if any) | |
+| Building block | Your use (required unless noted) |
+|----------------|----------------------------------|
+| Tools | Five named tools — no `run_sql` |
+| Skills | ≥6 `SKILL.md` files; progressive disclosure |
+| Subagents | **Required:** segment/mix or pickup delegated via task tool |
+| Planning | Multi-part GM questions decomposed before tool calls |
+| Memory / filesystem | Multi-turn context — not stateless chat |
+| Human-in-the-loop | **Required:** `get_as_of_otb` behind approval interrupt |
+| Model & system prompt | Revenue-manager persona; answer style per brief §12 |
 
-## 5. Skill routing
+## 5. Skill → tool routing matrix
 
-- Which skills load for OTB vs pickup vs mix questions
-- At least two skills that encode **judgment** (thresholds / recommendations), not just definitions
+| Skill (name) | Primary tool(s) | Judgment? (Y/N) |
+|--------------|-----------------|-----------------|
+| | | |
+| | | |
+| | | |
 
-## 6. Deployment topology
+- At least **3** skills encode judgment (threshold + recommended action)
+- Document which skills load for OTB vs pickup vs mix vs block questions
+
+## 6. Agent tests
+
+- `tests/test_agent.py` — how HITL on `get_as_of_otb` and subagent routing are asserted
+- `tests/test_skills.py` — how judgment thresholds are validated without LLM calls
+
+## 7. Deployment topology
 
 - DB, agent backend, UI (LangGraph / Agent Chat UI / custom)
-- `GET /health` fields: `db_fingerprint`, `anchor_date`, `total_stay_rows`
+- `GET /health` fields: `db_fingerprint`, `dataset_revision`, `row_hash`,
+  `financial_status_posted_only_rows`
 - Where API keys live (never in git)
 
-## 7. Out of scope (optional)
+## 8. Out of scope (optional)
 
 - What you deliberately did **not** build and why

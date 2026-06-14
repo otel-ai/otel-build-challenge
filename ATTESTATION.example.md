@@ -75,6 +75,24 @@ How will you prove you did not miss the last list page during ETL?
 
 > Your answer:
 
+### 11. Tool grain
+
+For `get_otb_summary`, what is the difference between `row_count` and `reservation_count`?
+
+> Your answer:
+
+### 12. Human-in-the-loop
+
+Why must `get_as_of_otb` be gated behind approval, and what goes wrong if it is not?
+
+> Your answer:
+
+### 13. Skill vs tool
+
+Name one revenue-manager question that should load a **skill** but call **`get_segment_mix`**, not raw SQL.
+
+> Your answer:
+
 ---
 
 ## ETL design (one line)
