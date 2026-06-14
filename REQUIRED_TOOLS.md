@@ -147,8 +147,7 @@ def get_block_vs_transient_mix(stay_month: str) -> dict:
 ## Tests you must ship
 
 Add `tests/test_tools.py` in your solution repo with **at least eight** test cases.
-We publish property-based scenarios in the **candidate pack**
-(`tests/TOOL_TEST_SCENARIOS.md`).
+We publish property-based scenarios in [tests/TOOL_TEST_SCENARIOS.md](tests/TOOL_TEST_SCENARIOS.md).
 
 ---
 

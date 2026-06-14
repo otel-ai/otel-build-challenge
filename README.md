@@ -11,49 +11,44 @@ data, LangChain Deep Agents, and a Postgres database you populate via ETL.
 ## How to start
 
 1. **Create your own repo** for the solution (do not fork this brief).
-2. **Read this README** and skim [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md) and the
-   [data site](https://otel-hackathon-data-site.vercel.app) (your scrape target).
-3. **Request the Phase 0 candidate pack** — attestation template, test scenarios,
-   fingerprint script, and examples are **not** in this public repo. DM **Manoj**
-   ([LinkedIn](https://www.linkedin.com/in/manoj07ar/)) or **Nikhil** on LinkedIn
-   with your solution repo URL. We will share the private pack (read-only repo
-   access or zip).
-4. **Complete Phase 0** — fill `ATTESTATION.md` (from the pack) and send a
-   **one-line ETL design** (pagination + idempotency + anchor date). Wait for
-   approval before heavy ETL or agent work.
-5. **Questions or blockers** at any phase — use the same LinkedIn DM. We do not
-   monitor GitHub issues on this repository.
+2. **Read this README**, [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md), and
+   [SUBMISSION.md](SUBMISSION.md).
+3. **Scrape the [data site](https://otel-hackathon-data-site.vercel.app)** and build
+   ETL → tools → agent → deploy (phases below).
+4. **Self-check before submitting:** run
+   `scripts/compute_load_fingerprint.py` and reconcile with
+   [/verify](https://otel-hackathon-data-site.vercel.app/verify) on scrape day.
+5. **Submit** per [SUBMISSION.md](SUBMISSION.md) — repo URL, live agent URL, and
+   credentials via the intake channel listed there.
+
+Everything you need is in **this repository** plus the live data site. There is no
+separate pack repo and no approval step before you begin building.
 
 ---
 
 ## How this challenge is gated
 
-Work through the phases in order. Each phase has deliverables we review before
-you invest in the next layer.
+Work through the phases in order. Deliverables are checked objectively (tests,
+`LOAD_PROOF` vs `/verify`, repo structure) — not via a pre-build approval DM.
 
 | Phase | Deliverable | Doc |
 |-------|-------------|-----|
-| **0** | `ATTESTATION.md` + one-line ETL design (DM before heavy build) | Candidate pack (Phase 0) |
+| **0** | `ATTESTATION.md` (comprehension + one-line ETL note) | [ATTESTATION.example.md](ATTESTATION.example.md) |
 | **1** | ETL pipeline + `etl/LOAD_PROOF.json` + `etl/SCRAPE_MANIFEST.json` | Phase 1 below |
 | **2** | Required tools + `tests/test_tools.py` | [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md) |
 | **3** | Skills + `ARCHITECTURE.md` | Phase 3 below |
-| **4** | Live deployed agent + 30 min eval slot | Phase 4 below |
+| **4** | Live deployed agent + submission | [SUBMISSION.md](SUBMISSION.md) |
 | **5** | Engineering interview (by invitation) | Phase 5 below |
 
 ### How we review
 
-- Phases are reviewed **in order**. We may pause your progress if Phase 0 or Phase 1
-  deliverables are shallow or inconsistent with the official schema.
-- Understand **grain, dates, and OTB filters** before scaling agent code — do not treat
-  the brief as a single codegen prompt.
-- Coding assistants are fine. Submitted artifacts must match the **live data site**
-  and the ETL **you** built.
-
-### Candidate pack (Phase 0 — not public)
-
-See [How to start](#how-to-start) — DM **Manoj**
-([LinkedIn](https://www.linkedin.com/in/manoj07ar/)) or **Nikhil** on LinkedIn for
-the private pack. Do not start heavy ETL until Phase 0 is approved.
+- Submissions must reconcile with the **live data site** and the ETL **you** built.
+- Understand **grain, dates, and OTB filters** — do not treat the brief as a single
+  codegen prompt.
+- Coding assistants are fine. Passing `compute_load_fingerprint.py` is necessary
+  but not sufficient; we run additional internal checks on submitted repos.
+- You will receive a **submission received** acknowledgment only — not scores,
+  ranks, or rubric feedback.
 
 ---
 
@@ -87,23 +82,24 @@ postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon
 - `sql/VIEWS.example.sql` — semantic view templates for Phase 2
 - `REQUIRED_TOOLS.md` — Phase 2 tool contract
 - `ARCHITECTURE.example.md` — Phase 3 architecture template
-
-Attestation template, ETL/tool test scenarios, `LOAD_PROOF` examples, and the
-fingerprint script are in the **candidate pack** (shared after Phase 0 DM).
+- `ATTESTATION.example.md` — Phase 0 attestation template
+- `scripts/compute_load_fingerprint.py` — generate `etl/LOAD_PROOF.json` after load
+- `tests/ETL_TEST_SCENARIOS.md`, `tests/TOOL_TEST_SCENARIOS.md` — published test properties
+- `etl/LOAD_PROOF.example.json`, `etl/SCRAPE_MANIFEST.example.json` — proof shapes
+- `SUBMISSION.md` — how to submit when done
 
 ---
 
 ## Phase 0 — Comprehension attestation
 
-Before building infrastructure, complete `ATTESTATION.md` in your solution repo
-using the template from the **candidate pack** (see [How to start](#how-to-start)).
+Copy [ATTESTATION.example.md](ATTESTATION.example.md) to your solution repo as
+`ATTESTATION.md` and answer all comprehension prompts. Include a **one-line ETL
+design** (pagination + idempotency + anchor date) in the attestation or your
+`ARCHITECTURE.md`.
 
-You must answer all comprehension prompts in that template.
-
-**Do not start heavy ETL or agent build until Phase 0 DM review** — send your
-completed `ATTESTATION.md` and one-line ETL design first.
-
-DM a **one-line ETL design** (pagination + idempotency + anchor date) before Phase 1 review.
+Commit `ATTESTATION.md` before final submission. There is no pre-build approval
+step — start ETL when you are ready, but shallow attestations are flagged during
+internal review.
 
 ---
 
@@ -176,7 +172,7 @@ agent reads the database **you** built.
 #### `etl/SCRAPE_MANIFEST.json`
 
 After scraping, commit a manifest proving you captured the full reservation list.
-Shape and fields are documented in the **candidate pack** (`etl/SCRAPE_MANIFEST.example.json`).
+Shape and fields are documented in [etl/SCRAPE_MANIFEST.example.json](etl/SCRAPE_MANIFEST.example.json).
 
 Required fields include:
 
@@ -195,8 +191,7 @@ line). It must match `count(distinct reservation_id)` in your DB and
 
 #### `etl/LOAD_PROOF.json`
 
-After ETL, generate a load proof using `scripts/compute_load_fingerprint.py` from
-the **candidate pack** (copy into your repo or run against your `DATABASE_URL`):
+After ETL, generate a load proof using [scripts/compute_load_fingerprint.py](scripts/compute_load_fingerprint.py):
 
 ```bash
 pip install 'psycopg[binary]'
@@ -213,7 +208,7 @@ python scripts/compute_load_fingerprint.py \
 
 Commit `etl/LOAD_PROOF.json` in your solution repo. It must match your hosted
 database and the data site [verify page](https://otel-hackathon-data-site.vercel.app/verify).
-Example shape is in the candidate pack (`etl/LOAD_PROOF.example.json`).
+Example shape is in [etl/LOAD_PROOF.example.json](etl/LOAD_PROOF.example.json).
 
 **Phase 1 checklist**
 
@@ -222,7 +217,7 @@ Example shape is in the candidate pack (`etl/LOAD_PROOF.example.json`).
 - [ ] `load_manifest` populated on every ETL run
 - [ ] `etl/SCRAPE_MANIFEST.json` committed
 - [ ] `etl/LOAD_PROOF.json` committed
-- [ ] `tests/test_etl.py` with ≥ 3 cases covering published ETL scenarios (candidate pack)
+- [ ] `tests/test_etl.py` with ≥ 3 cases covering [published ETL scenarios](tests/ETL_TEST_SCENARIOS.md)
 - [ ] Row counts reconciled with `/verify`
 
 ---
@@ -231,7 +226,7 @@ Example shape is in the candidate pack (`etl/LOAD_PROOF.example.json`).
 
 Implement the five required tools and semantic views exactly as specified in
 [REQUIRED_TOOLS.md](REQUIRED_TOOLS.md). Ship `tests/test_tools.py` with at least
-eight cases covering the published tool scenarios in the **candidate pack**.
+eight cases covering the [published tool scenarios](tests/TOOL_TEST_SCENARIOS.md).
 
 **Phase 2 checklist**
 
@@ -355,57 +350,40 @@ exactly what this challenge is testing.
 
 ---
 
-## Phase 4 — Deploy and live evaluation
+## Phase 4 — Deploy and submit
 
-**Primary evaluation:** we open your URL during a **scheduled 30-minute slot**,
-type revenue-manager questions, and judge answers live. We may also skim your
-repo for phase artifacts. If the link is down during your slot, there is nothing
-to evaluate.
-
-So your final deliverable is one thing: **a live URL where your agent is running
-and ready to answer questions.**
+Your final deliverable is a **live URL** where your agent is running and ready to
+answer revenue-manager questions. We review submissions internally (repo +
+deployed agent). There is no default live eval slot — submit when you are ready.
 
 ### What the URL must be
 
 A web page with a **chat box**: we type a revenue-manager question (e.g. *"What's
 driving July?"*, *"Are we too dependent on OTA?"*), and your **Deep Agent
 answers** — in plain English, with the numbers, like the examples in Section 11.
-That's it.
 
 - The answer must come **from your agent**, reading **your database** (the one
   your ETL filled in Step 1). No hard-coded or pre-written answers.
-- The agent must be **live and responsive** during the evaluation window. If it
-  sleeps or the database is down, you fail the evaluation even if your code is
-  perfect — so make sure everything stays running.
-- It does **not** need to look pretty. A plain chat box is completely fine. We
-  judge the *answers*, not the design.
+- The agent must be **live and responsive** when we review. If it sleeps or the
+  database is down, there is nothing to evaluate.
+- It does **not** need to look pretty. A plain chat box is completely fine.
 
-### Protect it (recommended)
+### Protect it (required)
 
-Because the URL is public, anyone could find it and spam your agent (which costs
-you money and could be abused). To prevent this, **put it behind a simple
-username and password** (HTTP basic auth or a basic login screen is enough).
+Put the URL behind **HTTP basic auth** or a simple login screen so it cannot be
+spammed publicly.
 
-Then:
-- **Share the URL** with us in your submission (it can be public).
-- **Send the username and password privately** — DM them to me on **LinkedIn**.
-  Do **not** put credentials in your README, your repo, or anywhere public.
+- **Share the URL** in your submission.
+- **Send credentials privately** via the intake channel in [SUBMISSION.md](SUBMISSION.md)
+  — never in your README or repo.
 
 ### How to submit
 
-**Build in your own repository.** Create a **new, separate Git repository of your
-own** for your solution — do **not** fork this one. Put your ETL, your Deep Agents
-wiring, your tools, skills, and subagents there. (This repo is just the brief; your
-work lives in your repo.)
+See [SUBMISSION.md](SUBMISSION.md) for the checklist and intake details. In short:
 
-Then send us:
-
-1. **The live agent URL.**
-2. **The username + password** (via LinkedIn DM only — not in the repo).
-3. **A link to your own code repository**, so we can see *how* you built it — your
-   ETL, your Deep Agents wiring, your tools, your skills, your subagents. The
-   live answers show us *what* it does; the repo shows us *how*. (You can keep it
-   private and add us as a collaborator, or make it public — your call.)
+1. **Live agent URL**
+2. **Username + password** (private intake only)
+3. **Link to your solution repo** (public or private with collaborator access)
 
 ### Deployment hints
 
@@ -450,8 +428,8 @@ so prefer a UI that shows tool and skill calls.
 - [ ] Agent deployed with streaming tool/skill UI + `GET /health`
 - [ ] URL protected with username/password
 - [ ] Separate repo (not a fork of this brief)
-- [ ] Sent: URL + credentials (LinkedIn DM) + repo link + eval slot time
-- [ ] Service stays up for the scheduled window
+- [ ] Submitted per [SUBMISSION.md](SUBMISSION.md) (URL + credentials + repo link)
+- [ ] Service stays up for at least 7 days after submission
 
 ---
 
@@ -614,7 +592,7 @@ Business that comes directly through the hotel’s own website / reservations / 
 
 ### Group business
 Reservations tied to a conference, corporate group, event, or similar multi-room booking.
-For mix analysis, filter on the `is_group` flag in the fact table.
+For mix analysis, filter on the `is_block` flag in the fact table.
 
 ### Transient business
 Normal individual bookings, usually not group blocks (non-group rows).

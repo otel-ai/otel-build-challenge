@@ -18,16 +18,23 @@ DATA_SITE_URL = "https://otel-hackathon-data-site.vercel.app"
 DATA_SITE_ROUTES = ("/", "/reservations", "/verify", "/reference", "/changelog")
 DEFAULT_DB_URL = "postgresql://hackathon:hackathon@localhost:5432/hotel_hackathon"
 
-# Grading artifacts belong in otel-build-challenge-candidate-pack (private).
-GATED_PATHS = (
+REQUIRED_PUBLIC_PATHS = (
     "ATTESTATION.example.md",
-    "CONTRIBUTING.md",
+    "SUBMISSION.md",
     "tests/TOOL_TEST_SCENARIOS.md",
     "tests/ETL_TEST_SCENARIOS.md",
     "etl/LOAD_PROOF.example.json",
     "etl/SCRAPE_MANIFEST.example.json",
     "scripts/compute_load_fingerprint.py",
+)
+
+# Must never appear in the public brief repo.
+INTERNAL_ONLY_PATHS = (
     ".otel-scaffold",
+    "evaluator/scan_submission.py",
+    "evaluator/honeypot_manifest.json",
+    "evaluator/rubric.md",
+    "evaluator/expected_fingerprint.json",
 )
 
 
@@ -41,15 +48,23 @@ def check_tracked_files_exist() -> list[str]:
     return errors
 
 
-def check_no_gated_files() -> list[str]:
+def check_required_public_files() -> list[str]:
+    errors: list[str] = []
+    for rel in REQUIRED_PUBLIC_PATHS:
+        if not (ROOT / rel).is_file():
+            errors.append(f"missing required public file: {rel}")
+    return errors
+
+
+def check_no_internal_only_files() -> list[str]:
     errors: list[str] = []
     tracked = subprocess.check_output(
         ["git", "ls-files"], cwd=ROOT, text=True
     ).strip().splitlines()
     for rel in tracked:
-        for gated in GATED_PATHS:
-            if rel == gated or rel.startswith(gated.rstrip("/") + "/"):
-                errors.append(f"gated file must not be public: {rel}")
+        for internal in INTERNAL_ONLY_PATHS:
+            if rel == internal or rel.startswith(internal.rstrip("/") + "/"):
+                errors.append(f"internal-only file must not be public: {rel}")
     return errors
 
 
@@ -80,8 +95,10 @@ def check_tools_and_schema() -> list[str]:
         errors.append("sql/VIEWS.example.sql missing required views")
 
     readme = (ROOT / "README.md").read_text()
-    if "candidate pack" not in readme.lower():
-        errors.append("README.md should mention the private candidate pack for Phase 0")
+    if "candidate pack" in readme.lower():
+        errors.append("README.md should not reference a separate candidate pack")
+    if "SUBMISSION.md" not in readme:
+        errors.append("README.md should link to SUBMISSION.md")
 
     return errors
 
@@ -273,7 +290,8 @@ def main() -> int:
 
     checks: list[tuple[str, Callable[[], list[str]]]] = [
         ("tracked files", check_tracked_files_exist),
-        ("no gated files in public repo", check_no_gated_files),
+        ("required public files", check_required_public_files),
+        ("no internal-only files in public repo", check_no_internal_only_files),
         ("tools and schema", check_tools_and_schema),
         ("markdown links", check_markdown_links),
         ("python compile", check_python_compile),
